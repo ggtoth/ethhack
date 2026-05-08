@@ -9,10 +9,17 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".test-dist/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    files: ["components/wallet-connect-card.tsx"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

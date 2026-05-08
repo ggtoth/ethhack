@@ -1,13 +1,33 @@
-import { dummyJobs, makeCreatedJob, toJobListItem } from "@/lib/workflow/dummy-endpoints";
+import { ZodError } from "zod";
+
+import {
+  createDummyJob,
+  listDummyJobs,
+  toJobListItem,
+} from "@/lib/workflow/dummy-endpoints";
 
 export async function GET() {
-  return Response.json(dummyJobs.map(toJobListItem));
+  return Response.json(listDummyJobs().map(toJobListItem));
 }
 
 export async function POST(request: Request) {
   const body = await readJson(request);
 
-  return Response.json(makeCreatedJob(body), { status: 201 });
+  try {
+    return Response.json(createDummyJob(body), { status: 201 });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return Response.json(
+        {
+          error: "Invalid job payload.",
+          details: error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
+
+    throw error;
+  }
 }
 
 async function readJson(request: Request) {

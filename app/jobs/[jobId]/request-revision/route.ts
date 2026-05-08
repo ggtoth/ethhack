@@ -1,13 +1,16 @@
+import { requestDummyRevision } from "@/lib/workflow/dummy-endpoints";
+
 type JobActionContext = {
   params: Promise<{ jobId: string }>;
 };
 
 export async function POST(_request: Request, context: JobActionContext) {
   const { jobId } = await context.params;
+  const result = requestDummyRevision(jobId);
 
-  return Response.json({
-    id: jobId,
-    status: "revision_requested",
-    message: "Revision requested successfully",
-  });
+  if (!result) {
+    return Response.json({ error: "Job not found." }, { status: 404 });
+  }
+
+  return Response.json(result);
 }
