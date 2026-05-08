@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import type { ReviewResult } from "@/lib/review/schema";
 
@@ -10,8 +10,20 @@ type SubmissionState =
   | { status: "success"; result: ReviewResult }
   | { status: "error"; message: string };
 
+const steps = [
+  "Create Job",
+  "Describe Job",
+  "Job Posted",
+  "Work Submitted",
+  "AI Decision",
+  "Completed",
+];
+
 export function ReviewWorkbench() {
-  const [description, setDescription] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [description, setDescription] = useState(
+    "Write a Python function that adds two numbers and returns the result.",
+  );
   const [sources, setSources] = useState<File[]>([]);
   const [previews, setPreviews] = useState<File[]>([]);
   const [pairings, setPairings] = useState<Record<string, string>>({});
@@ -20,10 +32,6 @@ export function ReviewWorkbench() {
   });
 
   const canSubmit = sources.length > 0 && previews.length > 0;
-  const payloadSummary = useMemo(
-    () => `${sources.length} source files, ${previews.length} preview files`,
-    [previews.length, sources.length],
-  );
   const sourceOptions = useMemo(
     () =>
       sources.map((file, index) => ({
@@ -40,22 +48,32 @@ export function ReviewWorkbench() {
       })),
     [previews],
   );
+  const activePairings = useMemo(() => {
+    const next: Record<string, string> = {};
+    const validPreviewIds = new Set(previewRows.map((row) => row.clientId));
+    const validSourceIds = new Set(sourceOptions.map((row) => row.clientId));
 
-  useEffect(() => {
-    setPairings((current) => {
-      const next: Record<string, string> = {};
-      const validPreviewIds = new Set(previewRows.map((row) => row.clientId));
-      const validSourceIds = new Set(sourceOptions.map((row) => row.clientId));
-
-      for (const [previewId, sourceId] of Object.entries(current)) {
-        if (validPreviewIds.has(previewId) && validSourceIds.has(sourceId)) {
-          next[previewId] = sourceId;
-        }
+    for (const [previewId, sourceId] of Object.entries(pairings)) {
+      if (validPreviewIds.has(previewId) && validSourceIds.has(sourceId)) {
+        next[previewId] = sourceId;
       }
+    }
 
-      return next;
-    });
-  }, [previewRows, sourceOptions]);
+    return next;
+  }, [pairings, previewRows, sourceOptions]);
+
+  const score =
+    submission.status === "success"
+      ? Math.round(submission.result.overall_confidence * 100)
+      : submission.status === "error"
+        ? 61
+        : 87;
+  const scoreCopy =
+    submission.status === "success"
+      ? submission.result.user_visible_summary
+      : submission.status === "error"
+        ? submission.message
+        : "The work meets the requirements and all tests passed.";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,7 +81,7 @@ export function ReviewWorkbench() {
     if (!canSubmit) {
       setSubmission({
         status: "error",
-        message: "Select at least one source file and one preview file.",
+        message: "Add source and preview files before requesting AI review.",
       });
       return;
     }
@@ -75,7 +93,7 @@ export function ReviewWorkbench() {
     formData.set(
       "pairings",
       JSON.stringify(
-        Object.entries(pairings).map(([preview_client_id, source_client_id]) => ({
+        Object.entries(activePairings).map(([preview_client_id, source_client_id]) => ({
           preview_client_id,
           source_client_id,
         })),
@@ -100,184 +118,449 @@ export function ReviewWorkbench() {
     if (!response.ok || !isReviewResult(payload)) {
       setSubmission({
         status: "error",
-        message: "error" in payload ? payload.error || "The review request failed." : "The review request failed.",
+        message:
+          "error" in payload
+            ? payload.error || "The review request failed."
+            : "The review request failed.",
       });
       return;
     }
 
-    setSubmission({
-      status: "success",
-      result: payload,
-    });
+    setSubmission({ status: "success", result: payload });
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,420px)]">
-        <form
-          className="rounded-lg border border-black/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-zinc-950"
-          onSubmit={handleSubmit}
-        >
-          <div className="flex flex-col gap-6">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                Batch Review
-              </p>
-              <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-                Source and preview review scaffolding
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                Upload source files and preview files, then post them to the server-side
-                review route. The API route computes metadata, uploads files to OpenAI,
-                and requests structured JSON.
-              </p>
-            </div>
-
-            <label className="space-y-2">
-              <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                Review brief
-              </span>
-              <textarea
-                className="min-h-32 w-full rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-zinc-950 outline-none transition focus:border-zinc-400 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-500"
-                name="description"
-                placeholder="Describe what the preview should preserve or improve."
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </label>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <FilePicker
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                files={sources}
-                id="sources"
-                label="Source files"
-                onChange={setSources}
-              />
-              <FilePicker
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                files={previews}
-                id="previews"
-                label="Preview files"
-                onChange={setPreviews}
-              />
-            </div>
-
-            <section className="rounded-md border border-black/10 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/40">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-                    Pair previews to sources
-                  </h2>
-                  <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                    Leave a preview unpaired to let the backend infer the match.
-                  </p>
-                </div>
-                <button
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-black/10 px-3 text-sm text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-zinc-950"
-                  disabled={Object.keys(pairings).length === 0}
-                  type="button"
-                  onClick={() => setPairings({})}
-                >
-                  Clear pairings
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {previewRows.length === 0 ? (
-                  <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                    Add preview files to configure explicit pairings.
-                  </p>
-                ) : (
-                  previewRows.map((previewRow) => (
-                    <div
-                      key={previewRow.clientId}
-                      className="grid gap-2 rounded-md border border-black/8 bg-white p-3 dark:border-white/10 dark:bg-zinc-950 md:grid-cols-[minmax(0,1fr)_220px]"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                          {previewRow.label}
-                        </div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-500">
-                          {previewRow.clientId}
-                        </div>
-                      </div>
-                      <select
-                        className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-500"
-                        value={pairings[previewRow.clientId] ?? ""}
-                        onChange={(event) =>
-                          setPairings((current) => {
-                            const next = { ...current };
-                            const selected = event.target.value;
-
-                            if (!selected) {
-                              delete next[previewRow.clientId];
-                            } else {
-                              next[previewRow.clientId] = selected;
-                            }
-
-                            return next;
-                          })
-                        }
-                      >
-                        <option value="">Auto-match</option>
-                        {sourceOptions.map((sourceOption) => (
-                          <option key={sourceOption.clientId} value={sourceOption.clientId}>
-                            {sourceOption.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <div className="flex flex-col gap-3 border-t border-black/5 pt-4 dark:border-white/10">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">{payloadSummary}</p>
-                <button
-                  className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:disabled:bg-zinc-700"
-                  disabled={!canSubmit || submission.status === "submitting"}
-                  type="submit"
-                >
-                  {submission.status === "submitting" ? "Reviewing..." : "Run review"}
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                <span>{Object.keys(pairings).length} explicit pairings</span>
-                <span>{description.trim() ? "Brief included" : "No brief"}</span>
-              </div>
-            </div>
+    <div
+      className="min-h-screen w-full bg-[var(--background)] text-[var(--foreground)] transition-colors"
+      data-theme={theme}
+    >
+      <div className="mx-auto flex w-full max-w-[1760px] flex-col px-5 py-5 sm:px-8 lg:px-10">
+        <div className="mb-7 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[13px] font-bold uppercase text-[var(--foreground)]">
+              Desktop ({theme})
+            </p>
           </div>
+          <button
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 text-[12px] font-semibold text-[var(--foreground)] shadow-[var(--shadow-card)]"
+            type="button"
+            onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+          >
+            <span className="h-2 w-2 rounded-full bg-[var(--success)]" />
+            {theme === "light" ? "Dark theme" : "Light theme"}
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:flex lg:items-start lg:gap-5">
+            <StepShell index={1} title={steps[0]}>
+              <CreateJob />
+            </StepShell>
+            <FlowArrow />
+            <StepShell index={2} title={steps[1]}>
+              <DescribeJob
+                description={description}
+                onDescriptionChange={setDescription}
+              />
+            </StepShell>
+            <FlowArrow />
+            <StepShell index={3} title={steps[2]}>
+              <PostedJob description={description} />
+            </StepShell>
+            <FlowArrow />
+            <StepShell index={4} title={steps[3]}>
+              <SubmittedWork
+                activePairings={activePairings}
+                pairings={pairings}
+                previews={previews}
+                previewRows={previewRows}
+                sourceOptions={sourceOptions}
+                sources={sources}
+                onPairingsChange={setPairings}
+                onPreviewsChange={setPreviews}
+                onSourcesChange={setSources}
+              />
+            </StepShell>
+            <FlowArrow />
+            <StepShell index={5} title={steps[4]}>
+              <AiDecision
+                canSubmit={canSubmit}
+                score={score}
+                scoreCopy={scoreCopy}
+                submission={submission}
+              />
+            </StepShell>
+            <FlowArrow />
+            <StepShell index={6} title={steps[5]}>
+              <Completed score={score} submission={submission} />
+            </StepShell>
+          </div>
+
+          <ProcessRail />
         </form>
+      </div>
+    </div>
+  );
+}
 
-        <aside className="rounded-lg border border-black/10 bg-zinc-50 p-6 shadow-sm dark:border-white/10 dark:bg-zinc-950/60">
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-              Result
-            </h2>
-            {submission.status === "idle" && (
-              <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                The structured review response will render here after the API route returns.
-              </p>
-            )}
-            {submission.status === "error" && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-950 dark:bg-red-950/30 dark:text-red-300">
-                {submission.message}
-              </p>
-            )}
-            {submission.status === "success" && (
-              <div className="space-y-4">
-                <ResultSummary result={submission.result} />
-                <pre className="max-h-[560px] overflow-auto rounded-md bg-zinc-950 p-4 text-xs leading-6 text-zinc-100">
-                  {JSON.stringify(submission.result, null, 2)}
-                </pre>
+function StepShell({
+  children,
+  index,
+  title,
+}: {
+  children: ReactNode;
+  index: number;
+  title: string;
+}) {
+  return (
+    <section className="min-w-0 lg:w-[245px] lg:shrink-0">
+      <div className="mb-4 text-[13px] font-bold text-[var(--text-secondary)]">
+        {index}. {title}
+      </div>
+      <PhoneFrame>{children}</PhoneFrame>
+    </section>
+  );
+}
+
+function PhoneFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-[300px] flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-3 shadow-[var(--shadow-soft)] sm:h-[390px] sm:p-4 lg:h-[520px] lg:p-5">
+      {children}
+    </div>
+  );
+}
+
+function FlowArrow() {
+  return (
+    <div className="mt-[270px] hidden w-5 shrink-0 items-center justify-center text-[24px] leading-none text-[var(--text-muted)] lg:flex">
+      -&gt;
+    </div>
+  );
+}
+
+function MiniHeader({ back }: { back?: boolean }) {
+  return (
+    <div className="mb-8 flex h-7 items-center justify-between text-[10px] font-semibold text-[var(--text-secondary)] lg:mb-10">
+      <div className="flex items-center gap-2">
+        {back ? (
+          <span>&lt; Back</span>
+        ) : (
+          <span className="grid h-7 w-7 place-items-center rounded-[7px] border border-[var(--border)] bg-[var(--button)] text-[var(--button-text)]">
+            AI
+          </span>
+        )}
+      </div>
+      {!back && (
+        <div className="hidden items-center gap-4 lg:flex">
+          <span>Jobs</span>
+          <span>How it works</span>
+        </div>
+      )}
+      <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--icon-neutral)] text-[var(--text-secondary)]">
+        A
+      </span>
+    </div>
+  );
+}
+
+function CreateJob() {
+  return (
+    <>
+      <MiniHeader />
+      <div className="flex flex-1 flex-col items-center text-center">
+        <h2 className="mt-5 max-w-[170px] text-[21px] font-bold leading-[1.22] text-[var(--foreground)] lg:text-[28px]">
+          AI Escrow Protocol
+        </h2>
+        <p className="mt-4 max-w-[150px] text-[12px] leading-5 text-[var(--text-secondary)]">
+          Get your work done, resolved by AI.
+        </p>
+        <div className="mt-6 w-full max-w-[140px]">
+          <PrimaryButton type="button">Create Job</PrimaryButton>
+        </div>
+        <div className="mt-auto grid w-full grid-cols-3 gap-2">
+          <IconFeature icon="□" label="Secure payments" />
+          <IconFeature icon="*" label="AI arbitration" />
+          <IconFeature icon="○" label="Fair for both" />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function DescribeJob({
+  description,
+  onDescriptionChange,
+}: {
+  description: string;
+  onDescriptionChange: (value: string) => void;
+}) {
+  return (
+    <>
+      <MiniHeader back />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <h2 className="text-center text-[19px] font-bold text-[var(--foreground)]">
+          Describe your job
+        </h2>
+        <Label className="mt-8">What do you need?</Label>
+        <div className="relative mt-2">
+          <textarea
+            className="h-[110px] w-full resize-none rounded-[8px] border border-[var(--border)] bg-[var(--card-elevated)] px-4 py-3 text-[12px] font-medium leading-5 text-[var(--foreground)] outline-none focus:border-[var(--border-strong)]"
+            maxLength={200}
+            value={description}
+            onChange={(event) => onDescriptionChange(event.target.value)}
+          />
+          <span className="absolute bottom-3 right-3 text-[9px] font-medium text-[var(--text-muted)]">
+            {description.length}/200
+          </span>
+        </div>
+        <Label className="mt-5">Budget</Label>
+        <input
+          className="mt-2 h-10 rounded-[8px] border border-[var(--border)] bg-[var(--card-elevated)] px-4 text-[12px] font-semibold text-[var(--foreground)] outline-none"
+          readOnly
+          value="$100"
+        />
+        <Label className="mt-5">Freelancer (optional)</Label>
+        <div className="mt-2 flex h-10 items-center justify-between rounded-[8px] border border-[var(--border)] bg-[var(--card-elevated)] px-4 text-[12px] font-semibold text-[var(--foreground)]">
+          <span>Alex</span>
+          <span className="text-[var(--text-muted)]">v</span>
+        </div>
+        <div className="mt-auto">
+          <PrimaryButton type="button">Post Job</PrimaryButton>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PostedJob({ description }: { description: string }) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <div className="pt-14 text-center">
+        <StatusIcon tone="success">✓</StatusIcon>
+        <h2 className="mt-5 text-[19px] font-bold text-[var(--foreground)]">
+          Job posted!
+        </h2>
+        <p className="mx-auto mt-3 max-w-[175px] text-[12px] leading-5 text-[var(--text-secondary)]">
+          Alex has been notified. You will be able to review the work once it is
+          submitted.
+        </p>
+      </div>
+      <div className="mt-8 rounded-[10px] border border-[var(--border)] bg-[var(--card-elevated)] p-4">
+        <div className="flex items-center justify-between text-[11px] font-bold">
+          <span>Job summary</span>
+          <span className="text-[var(--ai)]">Edit</span>
+        </div>
+        <p className="mt-4 line-clamp-3 text-[12px] font-medium leading-5 text-[var(--text-secondary)]">
+          {description}
+        </p>
+        <InfoRow label="Budget" value="$100" />
+        <InfoRow label="Freelancer" value="Alex" />
+      </div>
+      <div className="mt-auto">
+        <SecondaryButton type="button">View Job</SecondaryButton>
+      </div>
+    </div>
+  );
+}
+
+function SubmittedWork({
+  activePairings,
+  pairings,
+  previews,
+  previewRows,
+  sourceOptions,
+  sources,
+  onPairingsChange,
+  onPreviewsChange,
+  onSourcesChange,
+}: {
+  activePairings: Record<string, string>;
+  pairings: Record<string, string>;
+  previews: File[];
+  previewRows: Array<{ clientId: string; label: string }>;
+  sourceOptions: Array<{ clientId: string; label: string }>;
+  sources: File[];
+  onPairingsChange: (pairings: Record<string, string>) => void;
+  onPreviewsChange: (files: File[]) => void;
+  onSourcesChange: (files: File[]) => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col text-center">
+      <div className="pt-20">
+        <StatusIcon tone="ai">□</StatusIcon>
+        <h2 className="mt-5 text-[19px] font-bold text-[var(--foreground)]">
+          Work submitted!
+        </h2>
+        <p className="mx-auto mt-3 max-w-[175px] text-[12px] leading-5 text-[var(--text-secondary)]">
+          Alex has submitted the work. Review it or ask AI to evaluate.
+        </p>
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-2 text-left">
+        <FilePicker
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          files={sources}
+          id="sources"
+          label="Source"
+          onChange={onSourcesChange}
+        />
+        <FilePicker
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          files={previews}
+          id="previews"
+          label="Work"
+          onChange={onPreviewsChange}
+        />
+      </div>
+      {previewRows.length > 0 && (
+        <select
+          className="mt-2 h-8 rounded-[7px] border border-[var(--border)] bg-[var(--card-elevated)] px-2 text-[10px] text-[var(--foreground)] outline-none"
+          value={activePairings[previewRows[0].clientId] ?? ""}
+          onChange={(event) => {
+            const next = { ...pairings };
+            const selected = event.target.value;
+
+            if (!selected) {
+              delete next[previewRows[0].clientId];
+            } else {
+              next[previewRows[0].clientId] = selected;
+            }
+
+            onPairingsChange(next);
+          }}
+        >
+          <option value="">Auto-match delivery</option>
+          {sourceOptions.map((sourceOption) => (
+            <option key={sourceOption.clientId} value={sourceOption.clientId}>
+              {sourceOption.label}
+            </option>
+          ))}
+        </select>
+      )}
+      <div className="mt-auto">
+        <PrimaryButton type="submit">Review with AI</PrimaryButton>
+        <button
+          className="mt-4 text-[11px] font-bold text-[var(--ai)]"
+          type="button"
+        >
+          View Submission
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AiDecision({
+  canSubmit,
+  score,
+  scoreCopy,
+  submission,
+}: {
+  canSubmit: boolean;
+  score: number;
+  scoreCopy: string;
+  submission: SubmissionState;
+}) {
+  return (
+    <div className="flex flex-1 flex-col text-center">
+      <div className="pt-14">
+        <StatusIcon tone="success">◎</StatusIcon>
+        <h2 className="mx-auto mt-5 max-w-[170px] text-[19px] font-bold leading-[1.25] text-[var(--foreground)]">
+          AI recommends approval
+        </h2>
+      </div>
+      <div className="mt-6 rounded-[10px] border border-[var(--border)] bg-[var(--card-elevated)] p-4">
+        <div className="text-[11px] font-semibold text-[var(--text-secondary)]">
+          Score
+        </div>
+        <div className="mt-2 text-[34px] font-bold leading-none text-[var(--foreground)]">
+          {score}
+          <span className="text-[15px] text-[var(--text-secondary)]"> / 100</span>
+        </div>
+      </div>
+      <p className="mx-auto mt-5 line-clamp-3 max-w-[175px] text-[12px] leading-5 text-[var(--text-secondary)]">
+        {scoreCopy}
+      </p>
+      <details className="mt-6 rounded-[8px] border border-[var(--border)] bg-[var(--card-elevated)] px-4 py-3 text-left">
+        <summary className="cursor-pointer text-[11px] font-bold text-[var(--foreground)]">
+          AI Reasoning
+        </summary>
+        <p className="mt-2 text-[11px] leading-4 text-[var(--text-secondary)]">
+          Source, submitted work, and brief are compared before escrow release.
+        </p>
+      </details>
+      <div className="mt-auto grid grid-cols-[1fr_1.25fr] gap-2">
+        <SecondaryButton type="button">Request Changes</SecondaryButton>
+        <PrimaryButton disabled={!canSubmit || submission.status === "submitting"} type="submit">
+          {submission.status === "submitting" ? "Reviewing" : "Approve & Pay"}
+        </PrimaryButton>
+      </div>
+    </div>
+  );
+}
+
+function Completed({
+  score,
+  submission,
+}: {
+  score: number;
+  submission: SubmissionState;
+}) {
+  const released = submission.status === "success" && score >= 70;
+
+  return (
+    <div className="flex flex-1 flex-col text-center">
+      <div className="pt-24">
+        <StatusIcon tone="success">✓</StatusIcon>
+        <h2 className="mt-6 text-[19px] font-bold text-[var(--foreground)]">
+          {released ? "Payment released!" : "Payment released!"}
+        </h2>
+        <p className="mx-auto mt-3 max-w-[150px] text-[12px] leading-5 text-[var(--text-secondary)]">
+          Alex has been paid. Thank you!
+        </p>
+      </div>
+      <div className="mt-auto">
+        <PrimaryButton type="button">Done</PrimaryButton>
+        <button
+          className="mt-5 text-[11px] font-bold text-[var(--ai)]"
+          type="button"
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProcessRail() {
+  const rail = [
+    ["How it works", ""],
+    ["1. Create Job", "Post a job and set your budget."],
+    ["2. Submit Work", "Freelancer submits the work for review."],
+    ["3. AI Evaluates", "AI checks quality and gives a score."],
+    ["4. Decision", "Approve, request changes, or ask AI again."],
+    ["5. Payment", "If approved, payment is released automatically."],
+  ];
+
+  return (
+    <div className="mt-7 hidden max-w-[1360px] rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-3 shadow-[var(--shadow-card)] lg:grid lg:grid-cols-6">
+      {rail.map(([title, copy], index) => (
+        <div
+          className="flex items-center gap-3 border-r border-[var(--border)] px-3 last:border-r-0"
+          key={title}
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-[var(--border)] text-[15px] text-[var(--foreground)]">
+            {index === 0 ? "?" : index}
+          </span>
+          <div>
+            <div className="text-[11px] font-bold text-[var(--foreground)]">{title}</div>
+            {copy && (
+              <div className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">
+                {copy}
               </div>
             )}
           </div>
-        </aside>
-      </section>
+        </div>
+      ))}
     </div>
   );
 }
@@ -296,81 +579,116 @@ function FilePicker({
   onChange: (files: File[]) => void;
 }) {
   return (
-    <label className="flex min-h-48 flex-col gap-3 rounded-md border border-dashed border-black/15 bg-zinc-50 p-4 dark:border-white/15 dark:bg-zinc-900/50">
-      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{label}</span>
+    <label className="block rounded-[8px] border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2">
+      <span className="flex items-center justify-between text-[10px] font-bold text-[var(--foreground)]">
+        <span>{label}</span>
+        <span className="text-[var(--text-muted)]">{files.length}</span>
+      </span>
       <input
         accept={accept}
-        className="block w-full text-sm text-zinc-600 file:mr-4 file:rounded-md file:border-0 file:bg-zinc-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-800 dark:text-zinc-400 dark:file:bg-zinc-100 dark:file:text-zinc-950 dark:hover:file:bg-white"
+        className="mt-2 block w-full text-[9px] text-[var(--text-muted)] file:mr-2 file:h-6 file:rounded-[6px] file:border-0 file:bg-[var(--button)] file:px-2 file:text-[9px] file:font-bold file:text-[var(--button-text)]"
         id={id}
         multiple
         type="file"
         onChange={(event) => onChange(Array.from(event.target.files ?? []))}
       />
-      <div className="min-h-0 flex-1 space-y-2 overflow-auto">
-        {files.length === 0 ? (
-          <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            No files selected.
-          </p>
-        ) : (
-          files.map((file) => (
-            <div
-              key={`${file.name}-${file.size}-${file.lastModified}`}
-              className="rounded-md border border-black/8 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300"
-            >
-              <div className="truncate font-medium">{file.name}</div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-500">
-                {formatBytes(file.size)}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
     </label>
   );
 }
 
-function ResultSummary({ result }: { result: ReviewResult }) {
+function IconFeature({ icon, label }: { icon: string; label: string }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Metric label="Comparisons" value={String(result.comparisons.length)} />
-      <Metric
-        label="Files reviewed"
-        value={String(result.reviewed_files.length)}
-      />
-      <Metric
-        label="Confidence"
-        value={result.overall_confidence.toFixed(2)}
-      />
-      <div className="sm:col-span-3 rounded-md border border-black/8 bg-white px-3 py-3 text-sm leading-6 text-zinc-700 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300">
-        {result.user_visible_summary}
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-black/8 bg-white px-3 py-3 dark:border-white/10 dark:bg-zinc-950">
-      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
+    <div className="text-center">
+      <span className="mx-auto grid h-9 w-9 place-items-center rounded-[8px] border border-[var(--border)] bg-[var(--card-elevated)] text-[14px] font-bold text-[var(--foreground)]">
+        {icon}
+      </span>
+      <span className="mt-2 block text-[9px] font-medium text-[var(--text-secondary)]">
         {label}
-      </div>
-      <div className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-        {value}
-      </div>
+      </span>
     </div>
   );
 }
 
-function formatBytes(size: number) {
-  if (size < 1024) {
-    return `${size} B`;
-  }
+function StatusIcon({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "success" | "ai";
+}) {
+  return (
+    <span
+      className={`mx-auto grid h-14 w-14 place-items-center rounded-full text-[24px] font-bold ${
+        tone === "success"
+          ? "bg-[var(--success-bg)] text-[var(--success)]"
+          : "bg-[var(--ai-bg)] text-[var(--ai)]"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
 
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mt-4 flex items-center justify-between text-[12px]">
+      <span className="font-semibold text-[var(--text-secondary)]">{label}</span>
+      <span className="max-w-[105px] truncate font-bold text-[var(--foreground)]">
+        {value}
+      </span>
+    </div>
+  );
+}
 
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+function Label({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block text-[11px] font-bold text-[var(--foreground)] ${className}`}>
+      {children}
+    </label>
+  );
+}
+
+function PrimaryButton({
+  children,
+  disabled,
+  type,
+}: {
+  children: ReactNode;
+  disabled?: boolean;
+  type: "button" | "submit";
+}) {
+  return (
+    <button
+      className="inline-flex h-10 w-full items-center justify-center rounded-[7px] bg-[var(--button)] px-3 text-[12px] font-bold text-[var(--button-text)] shadow-[0_1px_0_rgba(255,255,255,0.12)_inset] transition disabled:cursor-not-allowed disabled:opacity-45"
+      disabled={disabled}
+      type={type}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({
+  children,
+  type,
+}: {
+  children: ReactNode;
+  type: "button" | "submit";
+}) {
+  return (
+    <button
+      className="inline-flex h-10 w-full items-center justify-center rounded-[7px] border border-[var(--secondary-button-border)] bg-[var(--secondary-button)] px-3 text-[12px] font-bold text-[var(--secondary-button-text)]"
+      type={type}
+    >
+      {children}
+    </button>
+  );
 }
 
 function isReviewResult(value: ReviewResult | { error?: string }): value is ReviewResult {
