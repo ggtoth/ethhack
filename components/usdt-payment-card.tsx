@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const SEPOLIA_CHAIN_ID = "0xaa36a7";
@@ -57,6 +58,7 @@ async function ensureSepolia(provider: EthereumProvider) {
 }
 
 export function UsdtPaymentCard() {
+  const router = useRouter();
   const [status, setStatus] = useState<"idle" | "confirming" | "processing" | "paid">("idle");
   const [txHash, setTxHash] = useState("");
   const [error, setError] = useState("");
@@ -104,7 +106,10 @@ export function UsdtPaymentCard() {
 
       setTxHash(hash);
       setStatus("processing");
-      window.setTimeout(() => setStatus("paid"), 1800);
+      window.setTimeout(() => {
+        setStatus("paid");
+        window.setTimeout(() => router.push("/jobs/landing-page-implementation"), 1300);
+      }, 1800);
     } catch {
       setStatus("idle");
       setError("Payment was rejected or failed.");
