@@ -293,7 +293,7 @@ function FileInputPanel({
 
 function ResultPanel({ submission }: { submission: SubmissionState }) {
   return (
-    <aside className="grid content-start gap-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]">
+    <aside className="grid min-w-0 content-start gap-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]">
       <div>
         <h2 className="text-lg font-bold text-[var(--text-primary)]">AI review</h2>
         <p className="mt-2 text-[13px] leading-6 text-[var(--text-secondary)]">
@@ -312,7 +312,7 @@ function ResultPanel({ submission }: { submission: SubmissionState }) {
       )}
 
       {submission.status === "success" && (
-        <div className="grid gap-4">
+        <div className="grid min-w-0 gap-4">
           <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
             <p className="text-[11px] font-bold uppercase text-[var(--text-muted)]">
               Summary
@@ -366,11 +366,11 @@ function ResultPanel({ submission }: { submission: SubmissionState }) {
             </div>
           )}
 
-          <details className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+          <details className="min-w-0 overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
             <summary className="cursor-pointer text-[12px] font-bold text-[var(--text-primary)]">
               JSON response
             </summary>
-            <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[var(--text-secondary)]">
+            <pre className="mt-3 max-h-[420px] min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[7px] bg-[var(--surface)] p-3 text-[11px] leading-5 text-[var(--text-secondary)]">
               {JSON.stringify(submission.result, null, 2)}
             </pre>
           </details>
