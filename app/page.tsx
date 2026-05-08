@@ -1,87 +1,117 @@
 import Link from "next/link";
 
-import { WorkflowStepper } from "@/components/marketplace/workflow-stepper";
-import { workflowSteps } from "@/lib/marketplace-data";
-
 export default function Home() {
+  const steps = [
+    {
+      title: "Create brief",
+      body: "Describe the work and set the ETH budget.",
+      action: "Start",
+      href: "/wallet",
+    },
+    {
+      title: "Fund escrow",
+      body: "Connect wallet and lock payment before work starts.",
+      action: "Connect",
+      href: "/wallet",
+    },
+    {
+      title: "Submit work",
+      body: "Freelancer adds proof links and notes.",
+      action: "Proof",
+      href: "/submit-work",
+    },
+    {
+      title: "Review and release",
+      body: "AI checks proof. Client releases escrow.",
+      action: "Review",
+      href: "/ai-review",
+    },
+  ];
+
   return (
-    <main className="flex flex-1 flex-col bg-[var(--background)] text-[var(--text-primary)]">
-      <section className="mx-auto grid w-full max-w-[1180px] gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8 lg:py-16">
-        <div className="max-w-3xl">
-          <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">
-            AI Escrow Protocol
-          </p>
-          <h1 className="mt-4 text-5xl font-bold leading-tight text-[var(--text-primary)] sm:text-6xl">
-            AI Escrow Protocol
-          </h1>
-          <p className="mt-5 text-xl font-semibold text-[var(--text-primary)]">
-            Get your work done, resolved by AI.
-          </p>
-          <p className="mt-5 max-w-2xl text-[16px] leading-8 text-[var(--text-secondary)]">
-            SmartJobs is a crypto freelancer marketplace prototype where clients lock
-            funds in escrow, freelancers submit work, and AI prepares a structured
-            review before the client makes the final decision.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              className="inline-flex h-11 items-center rounded-[8px] bg-[var(--accent)] px-5 text-[13px] font-bold text-[var(--accent-contrast)]"
-              href="/post-job"
-            >
-              Create Job
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center rounded-[8px] border border-[var(--border-strong)] px-5 text-[13px] font-bold text-[var(--text-primary)]"
-              href="/browse-jobs"
-            >
-              Browse Jobs
-            </Link>
-          </div>
-        </div>
-        <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
-          <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
-            <div>
-              <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">
-                Live MVP flow
-              </p>
-              <p className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-                Landing page implementation
-              </p>
-            </div>
-            <span className="rounded-full bg-[var(--success-bg)] px-3 py-1 text-[11px] font-bold text-[var(--success)]">
-              Funded
-            </span>
-          </div>
-          <div className="mt-5 grid gap-3">
-            {workflowSteps.map((step, index) => (
-              <div className="flex items-center gap-3" key={step}>
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--accent)] text-[12px] font-bold text-[var(--accent-contrast)]">
-                  {index + 1}
-                </span>
-                <span className="text-[13px] font-bold text-[var(--text-primary)]">{step}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-[1180px] px-4 pb-12 sm:px-6 lg:px-8">
-        <WorkflowStepper steps={workflowSteps} activeIndex={5} />
-      </section>
-
-      <section className="mx-auto grid w-full max-w-[1180px] gap-4 px-4 pb-14 sm:px-6 md:grid-cols-3 lg:px-8">
-        {[
-          ["Secure crypto escrow", "Client funds are locked before work begins."],
-          ["AI-assisted review", "Submissions are scored against the original brief."],
-          ["Human final decision", "The client approves, requests changes, or disputes."],
-        ].map(([title, body]) => (
-          <article
-            className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]"
-            key={title}
+    <main className="flex flex-1 flex-col bg-[var(--background)] font-mono text-[var(--text-primary)]">
+      <section className="mx-auto flex w-full max-w-[1040px] flex-col items-center px-4 pb-10 pt-12 text-center sm:px-6 sm:pt-16 lg:px-8 lg:pt-20">
+        <h1 className="max-w-[620px] text-[44px] font-black leading-[0.98] tracking-normal text-[var(--text-primary)] sm:text-[64px] lg:text-[68px]">
+          Crypto
+          <br />
+          freelance
+          <br />
+          escrow
+        </h1>
+        <p className="mt-6 max-w-[760px] text-[15px] leading-7 text-[var(--text-secondary)] sm:text-[16px]">
+          Hire work. Lock payment. Approve proof.
+        </p>
+        <div className="mt-5 flex w-full max-w-[340px] gap-3 sm:w-auto sm:max-w-none">
+          <Link
+            className="inline-flex h-[50px] flex-1 items-center justify-center rounded-[10px] bg-[var(--button)] px-10 text-[15px] font-black text-[var(--button-text)] shadow-none transition hover:bg-[var(--accent-hover)] sm:w-40 sm:flex-none"
+            href="/wallet"
           >
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{title}</h2>
-            <p className="mt-3 text-[14px] leading-6 text-[var(--text-secondary)]">{body}</p>
-          </article>
-        ))}
+            Start
+          </Link>
+          <Link
+            className="inline-flex h-[50px] flex-1 items-center justify-center rounded-[10px] border border-[var(--border-strong)] bg-transparent px-9 text-[15px] font-black text-[var(--text-primary)] transition hover:bg-[var(--surface)] sm:w-40 sm:flex-none"
+            href="/browse-jobs"
+          >
+            Jobs
+          </Link>
+        </div>
+
+        <div className="mt-8 w-full rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5 text-left shadow-[var(--shadow-soft)] sm:mt-9 sm:p-6">
+          <div className="text-center">
+            <p className="text-[13px] text-[var(--text-muted)]">Demo flow</p>
+            <h2 className="mt-2 text-[15px] font-black text-[var(--text-primary)]">
+              Step by step
+            </h2>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <article className="rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 sm:p-5">
+              <h3 className="text-[14px] font-black uppercase text-[var(--text-primary)]">
+                How it works
+              </h3>
+              <p className="mt-3 text-[15px] leading-7 text-[var(--text-secondary)]">
+                Client posts a job. Freelancer submits proof. AI checks it. Escrow gets
+                released.
+              </p>
+            </article>
+            <article className="rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 sm:p-5">
+              <h3 className="text-[14px] font-black uppercase text-[var(--text-primary)]">
+                Why escrow
+              </h3>
+              <p className="mt-3 text-[15px] leading-7 text-[var(--text-secondary)]">
+                Payment is locked before work starts. Release happens after proof review.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-[980px] px-4 pb-16 sm:px-6 lg:px-8">
+        <p className="mb-4 text-center text-[13px] text-[var(--text-muted)]">
+          One path. One job. One escrow release.
+        </p>
+        <div className="relative grid gap-3 pl-5 sm:gap-4 sm:pl-7">
+          <span className="absolute bottom-8 left-[9px] top-3 w-px bg-[var(--border)] sm:left-[13px]" />
+          {steps.map((step, index) => (
+            <article
+              className="relative rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 text-left sm:p-5"
+              key={step.title}
+            >
+              <span className="absolute -left-[26px] top-4 h-5 w-5 rounded-full border-[6px] border-[var(--surface-strong)] bg-[var(--text-primary)] sm:-left-[34px]" />
+              <h3 className="text-[15px] font-black text-[var(--text-primary)]">
+                {index + 1}. {step.title}
+              </h3>
+              <p className="mt-2 text-[15px] leading-7 text-[var(--text-secondary)]">
+                {step.body}
+              </p>
+              <Link
+                className="mt-4 inline-flex h-[42px] items-center rounded-[9px] bg-[var(--button)] px-4 text-[13px] font-black uppercase text-[var(--button-text)] transition hover:bg-[var(--accent-hover)]"
+                href={step.href}
+              >
+                {step.action}
+              </Link>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );

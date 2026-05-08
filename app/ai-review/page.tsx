@@ -1,28 +1,59 @@
 import Link from "next/link";
 
-import { AIReviewCard } from "@/components/marketplace/ai-review-card";
-import { PageHeader } from "@/components/page-header";
+const checks = [
+  ["Responsive landing page", "Matched"],
+  ["Deployed preview", "Matched"],
+  ["Source link", "Matched"],
+];
 
 export default function AIReviewPage() {
   return (
-    <main className="flex flex-1 flex-col bg-[var(--background)] text-[var(--text-primary)]">
-      <PageHeader
-        eyebrow="AI Review Result"
-        title="Review the recommendation before releasing escrow."
-        description="AI prepares the score, matched requirements, missing elements, and risk flags. The client still makes the final decision."
-      />
-      <section className="mx-auto grid w-full max-w-[1180px] gap-4 px-4 pb-12 sm:px-6 lg:grid-cols-[1fr_300px] lg:px-8">
-        <AIReviewCard />
-        <aside className="grid content-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]">
-          <Link className="inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--accent)] px-5 text-[13px] font-bold text-[var(--accent-contrast)]" href="/wallet">
-            Approve & Pay
+    <main className="flex flex-1 flex-col bg-[var(--background)] px-4 py-10 font-mono text-[var(--text-primary)] sm:px-6 lg:px-8">
+      <section className="mx-auto grid w-full max-w-[980px] gap-5 lg:grid-cols-[1fr_320px]">
+        <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)] sm:p-8">
+          <p className="text-[13px] font-black uppercase text-[var(--text-muted)]">
+            6. AI proof review
+          </p>
+          <h1 className="mt-3 text-[42px] font-black leading-none sm:text-[62px]">
+            Score
+            <br />
+            92/100
+          </h1>
+
+          <div className="mt-8 grid gap-3">
+            {checks.map(([label, status]) => (
+              <div
+                className="grid gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 sm:grid-cols-[1fr_100px] sm:items-center"
+                key={label}
+              >
+                <p className="text-[15px] font-black">{label}</p>
+                <p className="text-[12px] font-black uppercase text-[var(--success)]">
+                  {status}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <aside className="grid content-start gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5">
+          <div>
+            <p className="text-[13px] font-black uppercase text-[var(--text-muted)]">
+              Recommendation
+            </p>
+            <p className="mt-4 text-[34px] font-black leading-none">Approve</p>
+          </div>
+          <Link
+            className="inline-flex h-[50px] items-center justify-center rounded-[10px] bg-[var(--button)] px-6 text-[15px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)]"
+            href="/dashboard"
+          >
+            Release 0.42 ETH
           </Link>
-          <button className="h-11 rounded-[8px] border border-[var(--border-strong)] text-[13px] font-bold text-[var(--text-primary)]" type="button">
-            Request Changes
+          <button
+            className="h-[50px] rounded-[10px] border border-[var(--border-strong)] text-[15px] font-black text-[var(--text-primary)]"
+            type="button"
+          >
+            Request changes
           </button>
-          <Link className="inline-flex h-11 items-center justify-center rounded-[8px] border border-[var(--border-strong)] px-5 text-[13px] font-bold text-[var(--text-primary)]" href="/disputes">
-            Open Dispute
-          </Link>
         </aside>
       </section>
     </main>

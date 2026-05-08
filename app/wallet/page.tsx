@@ -1,36 +1,57 @@
-import { PageHeader } from "@/components/page-header";
+import Link from "next/link";
 
-const transactions = [
-  ["Escrow locked", "0.42 ETH", "Landing page implementation"],
-  ["Incoming payment", "0.18 ETH", "Wallet copy draft"],
-  ["Payment released", "0.31 ETH", "Mobile onboarding screens"],
-];
+const steps = ["Connect", "Create", "Accept", "Proof", "Review"];
 
 export default function WalletPage() {
   return (
-    <main className="flex flex-1 flex-col bg-[var(--background)] text-[var(--text-primary)]">
-      <PageHeader
-        eyebrow="Wallet"
-        title="Wallet and escrow balances."
-        description="Wallet connection, balances, locked funds, incoming payments, and transaction history are prepared for Web3 integration."
-      />
-      <section className="mx-auto grid w-full max-w-[1180px] gap-4 px-4 pb-12 sm:px-6 lg:grid-cols-[320px_1fr] lg:px-8">
-        <article className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]">
-          <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">Connected wallet</p>
-          <p className="mt-3 break-all text-[14px] font-bold text-[var(--text-primary)]">0x71f2...8d91</p>
-          <p className="mt-6 text-3xl font-bold text-[var(--text-primary)]">2.41 ETH</p>
-          <p className="mt-2 text-[13px] text-[var(--text-secondary)]">1.84 ETH locked in escrow</p>
-        </article>
-        <div className="grid gap-3">
-          {transactions.map(([type, amount, detail]) => (
-            <article className="grid gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-[1fr_140px]" key={detail}>
-              <div>
-                <p className="text-[13px] font-bold text-[var(--text-primary)]">{type}</p>
-                <p className="mt-1 text-[13px] text-[var(--text-secondary)]">{detail}</p>
-              </div>
-              <p className="text-[14px] font-bold text-[var(--text-primary)]">{amount}</p>
-            </article>
+    <main className="flex flex-1 flex-col bg-[var(--background)] px-4 py-10 font-mono text-[var(--text-primary)] sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-[860px]">
+        <div className="flex flex-wrap gap-2 text-[12px] font-black uppercase text-[var(--text-muted)]">
+          {steps.map((step, index) => (
+            <span
+              className={`rounded-full border px-3 py-2 ${
+                index === 0
+                  ? "border-[var(--text-primary)] text-[var(--text-primary)]"
+                  : "border-[var(--border)]"
+              }`}
+              key={step}
+            >
+              {index + 1}. {step}
+            </span>
           ))}
+        </div>
+
+        <div className="mt-8 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)] sm:p-8">
+          <p className="text-[13px] font-black uppercase text-[var(--text-muted)]">
+            Wallet login
+          </p>
+          <h1 className="mt-3 text-[42px] font-black leading-none sm:text-[62px]">
+            Connect
+            <br />
+            MetaMask
+          </h1>
+
+          <div className="mt-8 grid gap-3 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[13px] text-[var(--text-muted)]">Status</span>
+              <span className="text-[14px] font-black text-[var(--success)]">Connected</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[13px] text-[var(--text-muted)]">Wallet</span>
+              <span className="break-all text-right text-[14px] font-black">0xA71...9F2</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[13px] text-[var(--text-muted)]">Network</span>
+              <span className="text-[14px] font-black">Sepolia</span>
+            </div>
+          </div>
+
+          <Link
+            className="mt-6 inline-flex h-[50px] w-full items-center justify-center rounded-[10px] bg-[var(--button)] px-6 text-[15px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] sm:w-auto"
+            href="/post-job"
+          >
+            Create job
+          </Link>
         </div>
       </section>
     </main>
