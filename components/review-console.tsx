@@ -11,13 +11,14 @@ type SubmissionState =
   | { status: "error"; message: string };
 
 export function ReviewConsole() {
+  const [jobId, setJobId] = useState("job_demo_review");
   const [description, setDescription] = useState(
     "Compare the delivery against the source and escrow brief.",
   );
   const [sources, setSources] = useState<File[]>([]);
   const [previews, setPreviews] = useState<File[]>([]);
   const [submission, setSubmission] = useState<SubmissionState>({ status: "idle" });
-  const canSubmit = sources.length > 0 && previews.length > 0;
+  const canSubmit = jobId.trim().length > 0 && sources.length > 0 && previews.length > 0;
   const fileSummary = useMemo(
     () => `${sources.length} source files · ${previews.length} delivery files`,
     [previews.length, sources.length],
@@ -37,6 +38,7 @@ export function ReviewConsole() {
     setSubmission({ status: "submitting" });
 
     const formData = new FormData();
+    formData.set("jobId", jobId.trim());
     formData.set("description", description);
     formData.set("pairings", "[]");
 
@@ -75,6 +77,17 @@ export function ReviewConsole() {
     >
       <section className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
         <div className="grid gap-5">
+          <label className="grid gap-2">
+            <span className="text-[12px] font-bold text-[var(--text-primary)]">
+              Job ID
+            </span>
+            <input
+              className="h-10 rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--border-strong)]"
+              value={jobId}
+              onChange={(event) => setJobId(event.target.value)}
+            />
+          </label>
+
           <label className="grid gap-2">
             <span className="text-[12px] font-bold text-[var(--text-primary)]">
               Review brief

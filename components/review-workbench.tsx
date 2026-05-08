@@ -20,6 +20,7 @@ const steps = [
 ];
 
 export function ReviewWorkbench() {
+  const [jobId] = useState("job_demo_workflow");
   const [description, setDescription] = useState(
     "Write a Python function that adds two numbers and returns the result.",
   );
@@ -88,6 +89,7 @@ export function ReviewWorkbench() {
     setSubmission({ status: "submitting" });
 
     const formData = new FormData();
+    formData.set("jobId", jobId);
     formData.set("description", description);
     formData.set(
       "pairings",

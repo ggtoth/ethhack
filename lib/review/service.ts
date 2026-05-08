@@ -7,18 +7,23 @@ import {
 } from "@/lib/review/image-metadata";
 import { buildReviewPrompt } from "@/lib/review/prompt";
 import {
+  ReviewModelResultSchema,
   ReviewResultSchema,
   type ReviewInputFile,
   type ReviewResult,
 } from "@/lib/review/schema";
 
 type RunReviewArgs = {
+  jobId: string;
+  contractId?: string;
   description: string;
   sourceFiles: ReviewInputFile[];
   previewFiles: ReviewInputFile[];
 };
 
 export async function runBatchReview({
+  jobId,
+  contractId,
   description,
   sourceFiles,
   previewFiles,
@@ -40,6 +45,8 @@ export async function runBatchReview({
           {
             type: "input_text",
             text: buildReviewPrompt({
+              jobId,
+              contractId,
               description,
               sources: preparedSources,
               previews: preparedPreviews,
@@ -51,10 +58,7 @@ export async function runBatchReview({
       },
     ],
     text: {
-      format: zodTextFormat(ReviewResultSchema.omit({
-        reviewed_files: true,
-        timestamps: true,
-      }), "image_review_batch"),
+      format: zodTextFormat(ReviewModelResultSchema, "image_review_batch"),
     },
   });
 
@@ -66,6 +70,12 @@ export async function runBatchReview({
 
   return ReviewResultSchema.parse({
     ...parsed,
+    job_id: jobId,
+    contract_id: contractId,
+    comparisons: parsed.comparisons.map((comparison) => ({
+      ...comparison,
+      job_id: jobId,
+    })),
     reviewed_files: [
       ...preparedSources.map((item) => item.reviewedFile),
       ...preparedPreviews.map((item) => item.reviewedFile),
