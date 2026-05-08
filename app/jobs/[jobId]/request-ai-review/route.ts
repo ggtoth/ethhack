@@ -1,4 +1,4 @@
-import { getDummyJob, makeAiReview, makePreviewFile } from "@/lib/workflow/dummy-endpoints";
+import { requestDummyAiReview } from "@/lib/workflow/dummy-endpoints";
 
 type JobActionContext = {
   params: Promise<{ jobId: string }>;
@@ -6,17 +6,11 @@ type JobActionContext = {
 
 export async function POST(_request: Request, context: JobActionContext) {
   const { jobId } = await context.params;
-  const job = getDummyJob(jobId);
-  const previewFile = job.previewFile ?? makePreviewFile(jobId);
+  const result = requestDummyAiReview(jobId);
 
-  return Response.json({
-    jobId,
-    status: "ai_reviewed",
-    reviewInputs: {
-      sourceFiles: job.sourceFiles,
-      previewFile,
-    },
-    aiReview: makeAiReview(jobId),
-    message: "AI review completed successfully",
-  });
+  if (!result) {
+    return Response.json({ error: "Job not found." }, { status: 404 });
+  }
+
+  return Response.json(result);
 }

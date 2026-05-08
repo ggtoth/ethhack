@@ -1,4 +1,4 @@
-import { getDummyJob, makePreviewFile } from "@/lib/workflow/dummy-endpoints";
+import { uploadDummyPreview } from "@/lib/workflow/dummy-endpoints";
 
 type JobActionContext = {
   params: Promise<{ jobId: string }>;
@@ -6,15 +6,11 @@ type JobActionContext = {
 
 export async function POST(_request: Request, context: JobActionContext) {
   const { jobId } = await context.params;
-  const job = getDummyJob(jobId);
-  const previewFile = makePreviewFile(jobId);
+  const result = uploadDummyPreview(jobId);
 
-  return Response.json({
-    id: jobId,
-    status: "in_progress",
-    previewFile,
-    userVisiblePreview: previewFile,
-    sourceFiles: job.sourceFiles,
-    message: "Preview uploaded successfully and is visible to the client",
-  });
+  if (!result) {
+    return Response.json({ error: "Job not found." }, { status: 404 });
+  }
+
+  return Response.json(result);
 }

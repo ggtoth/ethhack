@@ -1,17 +1,8 @@
-import { z } from "zod";
-
 import { runBatchReview } from "@/lib/review/service";
 import type { ReviewInputFile } from "@/lib/review/schema";
+import { getDummyJobWithContract } from "@/lib/workflow/dummy-endpoints";
 
 export const runtime = "nodejs";
-
-const JobDetailsSchema = z.object({
-  id: z.string(),
-  contractId: z.string(),
-  title: z.string(),
-  description: z.string(),
-  requirements: z.string(),
-});
 
 export async function POST(request: Request) {
   try {
@@ -29,9 +20,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const job = await fetchJobDetails(request, jobId);
+    const jobRecord = getDummyJobWithContract(jobId);
 
-    if (job.contractId !== contractId) {
+    if (!jobRecord) {
+      return Response.json({ error: "Job not found." }, { status: 404 });
+    }
+
+    const { job, contract } = jobRecord;
+
+    if (contract.id !== contractId || contract.jobId !== job.id) {
       return Response.json(
         { error: "The contract ID does not match the requested job." },
         { status: 403 },
@@ -54,7 +51,7 @@ export async function POST(request: Request) {
 
     const result = await runBatchReview({
       jobId: job.id,
-      contractId: job.contractId,
+      contractId: contract.id,
       description,
       sourceFiles: normalizedSources,
       previewFiles: normalizedPreviews,
@@ -105,18 +102,11 @@ function toReviewInputFile(
   };
 }
 
-async function fetchJobDetails(request: Request, jobId: string) {
-  const endpoint = new URL(`/jobs/${encodeURIComponent(jobId)}`, request.url);
-  const response = await fetch(endpoint, { cache: "no-store" });
-
-  if (!response.ok) {
-    throw new Error("The requested job details could not be loaded.");
-  }
-
-  return JobDetailsSchema.parse(await response.json());
-}
-
-function buildAuthoritativeDescription(job: z.infer<typeof JobDetailsSchema>) {
+function buildAuthoritativeDescription(job: {
+  title: string;
+  description: string;
+  requirements: string;
+}) {
   return [
     `Job title: ${job.title}`,
     `Job description: ${job.description}`,
