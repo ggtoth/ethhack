@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
+import Script from "next/script";
 
 import { AppNavbar } from "@/components/app-navbar";
 import { AppThemeProvider } from "@/components/app-theme-provider";
@@ -51,7 +52,9 @@ export default async function RootLayout({
       style={{ colorScheme: initialTheme }}
     >
       <head>
-        <script
+        <Script
+          id="app-theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: getAppThemeInitScript() }}
           suppressHydrationWarning
         />
