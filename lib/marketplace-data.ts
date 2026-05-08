@@ -15,6 +15,7 @@ export type JobStatus =
 
 export type Job = {
   id: string;
+  submitJobId: string;
   title: string;
   category: string;
   budget: string;
@@ -71,6 +72,7 @@ export const freelancerWorkflow = [
 export const jobs: Job[] = [
   {
     id: "landing-page-implementation",
+    submitJobId: "job_456",
     title: "Landing page implementation",
     category: "Frontend",
     budget: "0.42 ETH",
@@ -91,6 +93,7 @@ export const jobs: Job[] = [
   },
   {
     id: "wallet-onboarding-copy",
+    submitJobId: "job_789",
     title: "Wallet onboarding copy",
     category: "Content",
     budget: "0.16 ETH",
@@ -109,6 +112,7 @@ export const jobs: Job[] = [
   },
   {
     id: "escrow-dashboard-audit",
+    submitJobId: "job_123",
     title: "Escrow dashboard audit",
     category: "Design Review",
     budget: "0.28 ETH",

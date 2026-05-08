@@ -23,6 +23,7 @@ export type DummyAiReview = {
 
 export type DummyJob = {
   id: string;
+  contractId: string;
   title: string;
   description: string;
   budget: number;
@@ -40,6 +41,7 @@ export type DummyJob = {
 export const dummyJobs: DummyJob[] = [
   {
     id: "job_123",
+    contractId: "contract_job_123",
     title: "Create a logo",
     description: "Need a simple coffee shop logo",
     budget: 100,
@@ -75,6 +77,7 @@ export const dummyJobs: DummyJob[] = [
   },
   {
     id: "job_456",
+    contractId: "contract_job_456",
     title: "Build a landing page",
     description: "Need a basic landing page for a startup",
     budget: 250,
@@ -96,6 +99,7 @@ export const dummyJobs: DummyJob[] = [
   },
   {
     id: "job_789",
+    contractId: "contract_job_789",
     title: "Write product copy",
     description: "Need concise copy for a productivity app",
     budget: 80,
@@ -124,6 +128,7 @@ export function getDummyJob(jobId: string) {
 export function toJobListItem(job: DummyJob) {
   return {
     id: job.id,
+    contractId: job.contractId,
     title: job.title,
     description: job.description,
     budget: job.budget,
@@ -137,6 +142,7 @@ export function toJobListItem(job: DummyJob) {
 export function makeCreatedJob(input: Partial<DummyJob> = {}) {
   return {
     ...makeFallbackJob("job_new_123"),
+    contractId: input.contractId ?? "contract_job_new_123",
     title: input.title ?? "New dummy job",
     description: input.description ?? "This is a stubbed job creation response.",
     budget: input.budget ?? 150,
@@ -185,6 +191,7 @@ export function makeAiReview(jobId: string): DummyAiReview {
 function makeFallbackJob(jobId: string): DummyJob {
   return {
     id: jobId,
+    contractId: `contract_${jobId}`,
     title: "Create a logo",
     description: "Need a simple coffee shop logo",
     budget: 100,

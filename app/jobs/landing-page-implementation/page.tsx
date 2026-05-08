@@ -40,7 +40,7 @@ export default function JobDetailPage() {
           </article>
           <Link
             className="inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--accent)] px-5 text-[13px] font-bold text-[var(--accent-contrast)]"
-            href="/submit-work"
+            href={`/submit-work?job=${encodeURIComponent(job.submitJobId)}`}
           >
             Submit Work
           </Link>

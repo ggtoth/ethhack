@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import type { ReviewResult } from "@/lib/review/schema";
 
@@ -10,27 +10,75 @@ type SubmissionState =
   | { status: "success"; result: ReviewResult }
   | { status: "error"; message: string };
 
+type JobDetails = {
+  id: string;
+  contractId: string;
+  title: string;
+  description: string;
+  requirements: string;
+};
+
 export function ReviewConsole() {
-  const [jobId, setJobId] = useState("job_demo_review");
-  const [description, setDescription] = useState(
-    "Compare the delivery against the source and escrow brief.",
-  );
+  const jobId = "job_456";
+  const [jobDetails, setJobDetails] = useState<JobDetails | null>(null);
+  const [jobDetailsError, setJobDetailsError] = useState<string | null>(null);
   const [sources, setSources] = useState<File[]>([]);
   const [previews, setPreviews] = useState<File[]>([]);
   const [submission, setSubmission] = useState<SubmissionState>({ status: "idle" });
-  const canSubmit = jobId.trim().length > 0 && sources.length > 0 && previews.length > 0;
+  const canSubmit = Boolean(jobDetails) && sources.length > 0 && previews.length > 0;
   const fileSummary = useMemo(
     () => `${sources.length} source files · ${previews.length} delivery files`,
     [previews.length, sources.length],
   );
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadJobDetails() {
+      try {
+        const response = await fetch(`/jobs/${encodeURIComponent(jobId)}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as JobDetails | { error?: string };
+
+        if (!response.ok || !isJobDetails(payload)) {
+          throw new Error(
+            "error" in payload && payload.error
+              ? payload.error
+              : "The job details could not be loaded.",
+          );
+        }
+
+        if (isMounted) {
+          setJobDetails(payload);
+          setJobDetailsError(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setJobDetails(null);
+          setJobDetailsError(
+            error instanceof Error
+              ? error.message
+              : "The job details could not be loaded.",
+          );
+        }
+      }
+    }
+
+    loadJobDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [jobId]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!canSubmit) {
+    if (!canSubmit || !jobDetails) {
       setSubmission({
         status: "error",
-        message: "Add at least one source file and one delivery file.",
+        message: "Load the job details and add at least one source file and one delivery file.",
       });
       return;
     }
@@ -38,9 +86,8 @@ export function ReviewConsole() {
     setSubmission({ status: "submitting" });
 
     const formData = new FormData();
-    formData.set("jobId", jobId.trim());
-    formData.set("description", description);
-    formData.set("pairings", "[]");
+    formData.set("jobId", jobDetails.id);
+    formData.set("contractId", jobDetails.contractId);
 
     for (const source of sources) {
       formData.append("sources", source);
@@ -84,18 +131,33 @@ export function ReviewConsole() {
             <input
               className="h-10 rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--border-strong)]"
               value={jobId}
-              onChange={(event) => setJobId(event.target.value)}
+              readOnly
             />
           </label>
 
           <label className="grid gap-2">
             <span className="text-[12px] font-bold text-[var(--text-primary)]">
-              Review brief
+              Contract ID
+            </span>
+            <input
+              className="h-10 rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--border-strong)]"
+              value={jobDetails?.contractId ?? "Loading..."}
+              readOnly
+            />
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-[12px] font-bold text-[var(--text-primary)]">
+              Project requirements
             </span>
             <textarea
               className="min-h-28 resize-none rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-3 text-[13px] leading-6 text-[var(--text-primary)] outline-none focus:border-[var(--border-strong)]"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              value={
+                jobDetails
+                  ? `${jobDetails.title}\n\n${jobDetails.description}\n\n${jobDetails.requirements}`
+                  : jobDetailsError ?? "Loading job details..."
+              }
+              readOnly
             />
           </label>
 
@@ -141,10 +203,10 @@ export function ReviewConsole() {
         )}
         {submission.status === "success" && (
           <div className="mt-4 grid gap-3">
-            <Metric label="Confidence" value={`${Math.round(submission.result.overall_confidence * 100)}%`} />
-            <Metric label="Comparisons" value={String(submission.result.comparisons.length)} />
+            <Metric label="Confidence" value={submission.result.comparison_notes.confidence} />
+            <Metric label="Files" value={String(submission.result.reviewed_files.length)} />
             <p className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[13px] leading-6 text-[var(--text-secondary)]">
-              {submission.result.user_visible_summary}
+              {submission.result.user_visible.summary}
             </p>
           </div>
         )}
@@ -205,5 +267,20 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function isReviewResult(value: ReviewResult | { error?: string }): value is ReviewResult {
-  return "comparisons" in value && Array.isArray(value.comparisons);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "schema_version" in value &&
+    "verdicts" in value
+  );
+}
+
+function isJobDetails(value: JobDetails | { error?: string }): value is JobDetails {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    "contractId" in value &&
+    "requirements" in value
+  );
 }

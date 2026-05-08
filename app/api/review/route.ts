@@ -2,78 +2,68 @@ import { z } from "zod";
 
 import { runBatchReview } from "@/lib/review/service";
 import type { ReviewInputFile } from "@/lib/review/schema";
-import { JobComparisonRequestSchema } from "@/lib/workflow/schema";
 
 export const runtime = "nodejs";
 
-const PairingSchema = z.array(
-  z.object({
-    preview_client_id: z.string(),
-    source_client_id: z.string(),
-  }),
-);
+const JobDetailsSchema = z.object({
+  id: z.string(),
+  contractId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  requirements: z.string(),
+});
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
 
-    const jobId = String(formData.get("jobId") ?? "");
-    const contractId = String(formData.get("contractId") ?? "") || undefined;
-    const description = String(formData.get("description") ?? "");
+    const jobId = getOptionalString(formData, "jobId");
+    const contractId = getOptionalString(formData, "contractId");
     const sourceFiles = formData.getAll("sources").filter(isFile);
     const previewFiles = formData.getAll("previews").filter(isFile);
-    const pairings = parsePairings(String(formData.get("pairings") ?? "[]"));
-    const comparisonRequest = parseComparisonRequest({
-      job_id: jobId,
-      contract_id: contractId,
-      description,
-      pairings,
-    });
 
-    if (sourceFiles.length === 0 || previewFiles.length === 0) {
+    if (!jobId || !contractId) {
       return Response.json(
-        {
-          error: "At least one source file and one preview file are required.",
-        },
+        { error: "The review request must include a job ID and contract ID." },
         { status: 400 },
       );
     }
 
-    const normalizedSources = sourceFiles.map((file, index) =>
-      toReviewInputFile(file, "source", `source_${index + 1}`),
-    );
+    const job = await fetchJobDetails(request, jobId);
+
+    if (job.contractId !== contractId) {
+      return Response.json(
+        { error: "The contract ID does not match the requested job." },
+        { status: 403 },
+      );
+    }
+
+    const description = buildAuthoritativeDescription(job);
+
+    const normalizedSources = sourceFiles.map((file, index) => {
+      const clientId = `source_${index + 1}`;
+
+      return toReviewInputFile(file, "source", clientId);
+    });
 
     const normalizedPreviews = previewFiles.map((file, index) => {
       const clientId = `preview_${index + 1}`;
-      const explicitPair = pairings.find(
-        (pairing) => pairing.preview_client_id === clientId,
-      );
 
-      return toReviewInputFile(file, "preview", clientId, explicitPair?.source_client_id);
+      return toReviewInputFile(file, "preview", clientId);
     });
 
     const result = await runBatchReview({
-      jobId: comparisonRequest.job_id,
-      contractId: comparisonRequest.contract_id,
-      description: comparisonRequest.description,
+      jobId: job.id,
+      contractId: job.contractId,
+      description,
       sourceFiles: normalizedSources,
       previewFiles: normalizedPreviews,
     });
 
     return Response.json(result);
   } catch (error) {
-    if (error instanceof RequestValidationError) {
-      return Response.json(
-        {
-          error: error.message,
-          details: error.zodError.flatten(),
-        },
-        { status: 400 },
-      );
-    }
-
     const message =
-      error instanceof Error ? error.message : "Review scaffolding failed.";
+      error instanceof Error ? error.message : "The review request failed.";
 
     return Response.json(
       {
@@ -84,20 +74,16 @@ export async function POST(request: Request) {
   }
 }
 
-function parseComparisonRequest(value: unknown) {
-  const parsed = JobComparisonRequestSchema.safeParse(value);
+function getOptionalString(formData: FormData, key: string) {
+  const value = formData.get(key);
 
-  if (!parsed.success) {
-    throw new RequestValidationError(parsed.error);
+  if (typeof value !== "string") {
+    return null;
   }
 
-  return parsed.data;
-}
+  const trimmed = value.trim();
 
-class RequestValidationError extends Error {
-  constructor(readonly zodError: z.ZodError) {
-    super("A valid job id and description are required for comparison.");
-  }
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function isFile(value: FormDataEntryValue): value is File {
@@ -108,20 +94,32 @@ function toReviewInputFile(
   file: File,
   role: ReviewInputFile["role"],
   clientId: string,
-  pairedSourceClientId?: string,
 ): ReviewInputFile {
   return {
     file,
     role,
     clientId,
-    pairedSourceClientId,
+    filePath: null,
+    createdAt: null,
+    updatedAt: null,
   };
 }
 
-function parsePairings(value: string) {
-  try {
-    return PairingSchema.parse(JSON.parse(value));
-  } catch {
-    return [];
+async function fetchJobDetails(request: Request, jobId: string) {
+  const endpoint = new URL(`/jobs/${encodeURIComponent(jobId)}`, request.url);
+  const response = await fetch(endpoint, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error("The requested job details could not be loaded.");
   }
+
+  return JobDetailsSchema.parse(await response.json());
+}
+
+function buildAuthoritativeDescription(job: z.infer<typeof JobDetailsSchema>) {
+  return [
+    `Job title: ${job.title}`,
+    `Job description: ${job.description}`,
+    `Project requirements: ${job.requirements}`,
+  ].join("\n");
 }

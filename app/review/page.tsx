@@ -7,7 +7,7 @@ export default function ReviewPage() {
       <PageHeader
         eyebrow="Review"
         title="AI delivery review console"
-        description="Upload source and delivery images, add a compact brief, and submit them to the existing structured review endpoint."
+        description="Upload source and delivery images. The backend loads the locked job requirements before requesting the AI review."
       />
       <ReviewConsole />
     </main>

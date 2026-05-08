@@ -43,7 +43,7 @@ export function JobCard({ job }: { job: Job }) {
         </Link>
         <Link
           className="inline-flex h-10 items-center rounded-[8px] border border-[var(--border-strong)] px-4 text-[12px] font-bold text-[var(--text-primary)]"
-          href="/submit-work"
+          href={`/submit-work?job=${encodeURIComponent(job.submitJobId)}`}
         >
           Apply
         </Link>

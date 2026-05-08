@@ -13,13 +13,21 @@ export type PreparedReviewedFile = PreparedFile & {
 
 export async function prepareReviewFile(
   inputFile: ReviewInputFile,
+  reviewedAt = new Date().toISOString(),
 ): Promise<PreparedReviewedFile> {
   const arrayBuffer = await inputFile.file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const md5 = createHash("md5").update(buffer).digest("hex");
   const sha256 = createHash("sha256").update(buffer).digest("hex");
   const resolution = getImageResolution(buffer, inputFile.file.type);
+  const notes = [
+    `Content type: ${inputFile.file.type || "application/octet-stream"}`,
+    `Size: ${inputFile.file.size} bytes`,
+  ];
+
+  if (resolution) {
+    notes.push(`Image resolution: ${resolution}`);
+  }
 
   return {
     ...inputFile,
@@ -29,11 +37,20 @@ export async function prepareReviewFile(
     }),
     reviewedFile: {
       file_id: `pending_${randomUUID()}`,
-      filename: inputFile.file.name,
+      file_name: inputFile.file.name,
+      file_path: inputFile.filePath ?? null,
       role: inputFile.role,
-      resolution,
-      md5,
-      sha256,
+      hash: {
+        algorithm: "sha256",
+        value: sha256,
+        provided: true,
+      },
+      timestamps: {
+        created_at: inputFile.createdAt ?? null,
+        updated_at: inputFile.updatedAt ?? null,
+        reviewed_at: reviewedAt,
+      },
+      notes,
     },
   };
 }
