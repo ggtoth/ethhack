@@ -20,7 +20,6 @@ const steps = [
 ];
 
 export function ReviewWorkbench() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [description, setDescription] = useState(
     "Write a Python function that adds two numbers and returns the result.",
   );
@@ -130,25 +129,14 @@ export function ReviewWorkbench() {
   }
 
   return (
-    <div
-      className="min-h-screen w-full bg-[var(--background)] text-[var(--foreground)] transition-colors"
-      data-theme={theme}
-    >
-      <div className="mx-auto flex w-full max-w-[1760px] flex-col px-5 py-5 sm:px-8 lg:px-10">
+    <div className="w-full bg-[var(--background)] text-[var(--text-primary)]">
+      <div className="mx-auto flex w-full max-w-[1760px] flex-col px-5 pb-10 pt-5 sm:px-8 lg:px-10">
         <div className="mb-7 flex items-center justify-between gap-4">
           <div>
             <p className="text-[13px] font-bold uppercase text-[var(--foreground)]">
-              Desktop ({theme})
+              Desktop workflow
             </p>
           </div>
-          <button
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 text-[12px] font-semibold text-[var(--foreground)] shadow-[var(--shadow-card)]"
-            type="button"
-            onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
-          >
-            <span className="h-2 w-2 rounded-full bg-[var(--success)]" />
-            {theme === "light" ? "Dark theme" : "Light theme"}
-          </button>
         </div>
 
         <form onSubmit={handleSubmit}>
