@@ -5,13 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-
-const navItems = [
-  { href: "/", label: "Home" },
-  { href: "/workflow", label: "Workflow" },
-  { href: "/review", label: "Review" },
-  { href: "/projects", label: "Projects" },
-];
+import { navItems } from "@/lib/marketplace-data";
 
 export function AppNavbar() {
   const pathname = usePathname();
@@ -31,7 +25,7 @@ export function AppNavbar() {
           <span>SmartJobs</span>
         </Link>
 
-        <div className="hidden items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 md:flex">
+        <div className="hidden items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 lg:flex">
           {navItems.map((item) => {
             const active = pathname === item.href;
 
@@ -56,7 +50,7 @@ export function AppNavbar() {
           <button
             aria-expanded={open}
             aria-label="Toggle navigation"
-            className="grid h-9 w-9 place-items-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[18px] font-semibold text-[var(--text-primary)] md:hidden"
+            className="grid h-9 w-9 place-items-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[18px] font-semibold text-[var(--text-primary)] lg:hidden"
             type="button"
             onClick={() => setOpen((current) => !current)}
           >
@@ -66,7 +60,7 @@ export function AppNavbar() {
       </nav>
 
       {open && (
-        <div className="border-t border-[var(--border)] bg-[var(--background)] px-4 py-3 md:hidden">
+        <div className="border-t border-[var(--border)] bg-[var(--background)] px-4 py-3 lg:hidden">
           <div className="mx-auto grid max-w-[1480px] gap-2">
             {navItems.map((item) => {
               const active = pathname === item.href;

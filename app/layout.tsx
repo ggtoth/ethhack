@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { AppNavbar } from "@/components/app-navbar";
 import { AppThemeProvider } from "@/components/app-theme-provider";
+import { Footer } from "@/components/marketplace/footer";
 import {
   APP_THEME_COOKIE_KEY,
   APP_THEME_DEFAULT,
@@ -26,8 +27,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SmartJobs Review Agent",
-  description: "Server-side scaffolding for structured source and preview image review.",
+  title: "SmartJobs | AI Escrow Protocol",
+  description: "Crypto escrow and AI-assisted review for freelance work.",
 };
 
 export default async function RootLayout({
@@ -59,6 +60,7 @@ export default async function RootLayout({
         <AppThemeProvider initialTheme={initialTheme}>
           <AppNavbar />
           {children}
+          <Footer />
         </AppThemeProvider>
       </body>
     </html>
