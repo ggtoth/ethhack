@@ -11,7 +11,8 @@ type SubmissionState =
   | { status: "error"; message: string };
 
 export function ReviewConsole() {
-  const [jobId, setJobId] = useState("job_demo_review");
+  const [jobId, setJobId] = useState("job_456");
+  const [contractId, setContractId] = useState("contract_job_456");
   const [description, setDescription] = useState(
     "Compare the delivery against the source and escrow brief.",
   );
@@ -39,6 +40,7 @@ export function ReviewConsole() {
 
     const formData = new FormData();
     formData.set("jobId", jobId.trim());
+    formData.set("contractId", contractId.trim());
     formData.set("description", description);
     formData.set("pairings", "[]");
 
@@ -85,6 +87,17 @@ export function ReviewConsole() {
               className="h-10 rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--border-strong)]"
               value={jobId}
               onChange={(event) => setJobId(event.target.value)}
+            />
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-[12px] font-bold text-[var(--text-primary)]">
+              Contract ID
+            </span>
+            <input
+              className="h-10 rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--border-strong)]"
+              value={contractId}
+              onChange={(event) => setContractId(event.target.value)}
             />
           </label>
 
@@ -141,10 +154,13 @@ export function ReviewConsole() {
         )}
         {submission.status === "success" && (
           <div className="mt-4 grid gap-3">
-            <Metric label="Confidence" value={`${Math.round(submission.result.overall_confidence * 100)}%`} />
-            <Metric label="Comparisons" value={String(submission.result.comparisons.length)} />
+            <Metric
+              label="Confidence"
+              value={submission.result.comparison_notes.confidence}
+            />
+            <Metric label="Files" value={String(submission.result.reviewed_files.length)} />
             <p className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[13px] leading-6 text-[var(--text-secondary)]">
-              {submission.result.user_visible_summary}
+              {submission.result.user_visible.summary}
             </p>
           </div>
         )}
@@ -205,5 +221,13 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function isReviewResult(value: ReviewResult | { error?: string }): value is ReviewResult {
-  return "comparisons" in value && Array.isArray(value.comparisons);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "schema_version" in value &&
+    "verdicts" in value &&
+    "comparison_notes" in value &&
+    "user_visible" in value &&
+    "reviewed_files" in value
+  );
 }

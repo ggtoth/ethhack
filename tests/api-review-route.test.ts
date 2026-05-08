@@ -59,9 +59,6 @@ require.cache[reviewServicePath] = {
           summary: "Mock route review passed.",
           what_user_will_see: [],
         },
-        overall_confidence: 0.9,
-        comparisons: [],
-        user_visible_summary: "Mock route review passed.",
       };
     },
   },

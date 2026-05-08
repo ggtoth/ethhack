@@ -41,7 +41,7 @@ export const ReviewedFileSchema = z.object({
   notes: z.array(z.string()),
 });
 
-export const CoreReviewResultSchema = z.object({
+export const ReviewResultSchema = z.object({
   schema_version: z.literal("1.0"),
   review_timestamp: z.string(),
   request_context: z.object({
@@ -65,22 +65,9 @@ export const CoreReviewResultSchema = z.object({
   }),
 });
 
-export const ReviewResultSchema = CoreReviewResultSchema.extend({
-  overall_confidence: z.number().min(0).max(1),
-  comparisons: z.array(
-    z.object({
-      label: z.string(),
-      verdict: VerdictEnumSchema,
-      reason: z.string(),
-    }),
-  ),
-  user_visible_summary: z.string(),
-});
-
-export const ReviewModelResultSchema = CoreReviewResultSchema;
+export const ReviewModelResultSchema = ReviewResultSchema;
 
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
-export type CoreReviewResult = z.infer<typeof CoreReviewResultSchema>;
 export type ReviewedFile = z.infer<typeof ReviewedFileSchema>;
 export type ReviewedFileRole = z.infer<typeof ReviewedFileRoleSchema>;
 

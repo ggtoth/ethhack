@@ -20,7 +20,8 @@ const steps = [
 ];
 
 export function ReviewWorkbench() {
-  const [jobId] = useState("job_demo_workflow");
+  const [jobId] = useState("job_456");
+  const [contractId] = useState("contract_job_456");
   const [description, setDescription] = useState(
     "Write a Python function that adds two numbers and returns the result.",
   );
@@ -64,13 +65,13 @@ export function ReviewWorkbench() {
 
   const score =
     submission.status === "success"
-      ? Math.round(submission.result.overall_confidence * 100)
+      ? confidenceScore(submission.result.comparison_notes.confidence)
       : submission.status === "error"
         ? 61
         : 87;
   const scoreCopy =
     submission.status === "success"
-      ? submission.result.user_visible_summary
+      ? submission.result.user_visible.summary
       : submission.status === "error"
         ? submission.message
         : "The work meets the requirements and all tests passed.";
@@ -90,6 +91,7 @@ export function ReviewWorkbench() {
 
     const formData = new FormData();
     formData.set("jobId", jobId);
+    formData.set("contractId", contractId);
     formData.set("description", description);
     formData.set(
       "pairings",
@@ -682,5 +684,25 @@ function SecondaryButton({
 }
 
 function isReviewResult(value: ReviewResult | { error?: string }): value is ReviewResult {
-  return "comparisons" in value && Array.isArray(value.comparisons);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "schema_version" in value &&
+    "verdicts" in value &&
+    "comparison_notes" in value &&
+    "user_visible" in value &&
+    "reviewed_files" in value
+  );
+}
+
+function confidenceScore(confidence: ReviewResult["comparison_notes"]["confidence"]) {
+  if (confidence === "HIGH") {
+    return 90;
+  }
+
+  if (confidence === "MEDIUM") {
+    return 70;
+  }
+
+  return 45;
 }

@@ -13,7 +13,6 @@ import {
 import {
   ReviewModelResultSchema,
   ReviewResultSchema,
-  type CoreReviewResult,
   type ReviewInputFile,
   type ReviewResult,
 } from "@/lib/review/schema";
@@ -104,7 +103,7 @@ export async function runBatchReview({
     throw new Error("The review model returned no structured output.");
   }
 
-  return withLegacyReviewFields({
+  return ReviewResultSchema.parse({
     ...parsed,
     review_timestamp: reviewTimestamp,
     request_context: {
@@ -178,7 +177,7 @@ function buildInsufficientReview({
   ].filter((value): value is string => Boolean(value));
   const reason = `The request is missing ${missingInputs.join(", ")}.`;
 
-  return withLegacyReviewFields({
+  return ReviewResultSchema.parse({
     schema_version: "1.0",
     review_timestamp: reviewTimestamp,
     request_context: {
@@ -221,43 +220,6 @@ function buildInsufficientReview({
       ],
     },
   });
-}
-
-function withLegacyReviewFields(result: CoreReviewResult): ReviewResult {
-  return ReviewResultSchema.parse({
-    ...result,
-    overall_confidence: confidenceToNumber(result.comparison_notes.confidence),
-    comparisons: [
-      {
-        label: "Preview vs source",
-        verdict: result.verdicts.preview_vs_source.verdict,
-        reason: result.verdicts.preview_vs_source.reason,
-      },
-      {
-        label: "Preview vs requirements",
-        verdict: result.verdicts.preview_vs_description.verdict,
-        reason: result.verdicts.preview_vs_description.reason,
-      },
-      {
-        label: "Source vs requirements",
-        verdict: result.verdicts.source_vs_description.verdict,
-        reason: result.verdicts.source_vs_description.reason,
-      },
-    ],
-    user_visible_summary: result.user_visible.summary,
-  });
-}
-
-function confidenceToNumber(confidence: CoreReviewResult["comparison_notes"]["confidence"]) {
-  if (confidence === "HIGH") {
-    return 0.9;
-  }
-
-  if (confidence === "MEDIUM") {
-    return 0.7;
-  }
-
-  return 0.45;
 }
 
 function getInputCompleteness({
