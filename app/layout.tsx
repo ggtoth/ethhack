@@ -5,7 +5,6 @@ import Script from "next/script";
 
 import { AppNavbar } from "@/components/app-navbar";
 import { AppThemeProvider } from "@/components/app-theme-provider";
-import { Footer } from "@/components/marketplace/footer";
 import {
   APP_THEME_COOKIE_KEY,
   APP_THEME_DEFAULT,
@@ -63,7 +62,6 @@ export default async function RootLayout({
         <AppThemeProvider initialTheme={initialTheme}>
           <AppNavbar />
           {children}
-          <Footer />
         </AppThemeProvider>
       </body>
     </html>
