@@ -1,17 +1,23 @@
 import type { PreparedReviewedFile } from "@/lib/review/image-metadata";
 
 type BuildPromptArgs = {
+  jobId: string;
+  contractId?: string;
   description: string;
   sources: PreparedReviewedFile[];
   previews: PreparedReviewedFile[];
 };
 
 export function buildReviewPrompt({
+  jobId,
+  contractId,
   description,
   sources,
   previews,
 }: BuildPromptArgs) {
   const manifest = {
+    job_id: jobId,
+    contract_id: contractId ?? null,
     description: description || "No user description provided.",
     sources: sources.map((source) => ({
       client_id: source.clientId,
@@ -35,6 +41,8 @@ export function buildReviewPrompt({
   return [
     "You are reviewing AI-generated preview images against source images.",
     "Return only schema-valid JSON.",
+    "The comparison is for exactly one job. Use the provided job_id on every comparison.",
+    "If contract_id is present, treat it as the escrow contract that owns this review.",
     "Use the provided file_id values exactly as given.",
     "If a preview includes source_client_id, prefer that as the intended pairing.",
     "If pairing is unclear, infer the most likely match and put unmatched files into the unmatched arrays.",

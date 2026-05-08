@@ -18,6 +18,7 @@ export const PreviewVsDescriptionSchema = MatchAssessmentSchema.extend({
 export const SourceVsDescriptionSchema = MatchAssessmentSchema;
 
 export const ComparisonSchema = z.object({
+  job_id: z.string(),
   source_file_id: z.string(),
   preview_file_id: z.string(),
   preview_vs_source: PreviewVsSourceSchema,
@@ -37,6 +38,8 @@ export const ReviewedFileSchema = z.object({
 });
 
 export const ReviewResultSchema = z.object({
+  job_id: z.string(),
+  contract_id: z.string().optional(),
   comparisons: z.array(ComparisonSchema),
   unmatched_sources: z.array(z.string()).default([]),
   unmatched_previews: z.array(z.string()).default([]),
@@ -46,6 +49,15 @@ export const ReviewResultSchema = z.object({
   }),
   overall_confidence: z.number().min(0).max(1),
   user_visible_summary: z.string(),
+});
+
+export const ReviewModelResultSchema = ReviewResultSchema.omit({
+  job_id: true,
+  contract_id: true,
+  reviewed_files: true,
+  timestamps: true,
+}).extend({
+  comparisons: z.array(ComparisonSchema.omit({ job_id: true })),
 });
 
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
