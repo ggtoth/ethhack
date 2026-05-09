@@ -16,6 +16,7 @@ export const smartJobsEscrowAbi = [
     inputs: [
       { name: "escrowId", type: "bytes32" },
       { name: "freelancer", type: "address" },
+      { name: "bidAmount", type: "uint256" },
     ],
     outputs: [],
   },
@@ -70,8 +71,10 @@ export const smartJobsEscrowAbi = [
           { name: "client", type: "address" },
           { name: "freelancer", type: "address" },
           { name: "amount", type: "uint256" },
+          { name: "bidAmount", type: "uint256" },
           { name: "status", type: "uint8" },
           { name: "jobId", type: "string" },
+          { name: "disputeReason", type: "string" },
           { name: "createdAt", type: "uint64" },
           { name: "updatedAt", type: "uint64" },
         ],

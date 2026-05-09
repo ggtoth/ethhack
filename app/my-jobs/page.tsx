@@ -1,9 +1,19 @@
-import Link from "next/link";
-
+import { JobLifecycleActions } from "@/components/job-lifecycle-actions";
 import { PageHeader } from "@/components/page-header";
 import { listDummyEscrowContracts, listDummyJobs } from "@/lib/workflow/dummy-endpoints";
 
-const tabs = ["Open", "In Progress", "Submitted", "Completed", "Disputed"];
+export const dynamic = "force-dynamic";
+
+const tabs = [
+  "Open",
+  "Funded",
+  "Locked",
+  "Submitted",
+  "Release Requested",
+  "Completed",
+  "Disputed",
+  "Cancelled",
+];
 
 export default function MyJobsPage() {
   const jobs = listDummyJobs();
@@ -64,25 +74,20 @@ export default function MyJobsPage() {
                   value={contract?.status.replaceAll("_", " ") ?? "missing"}
                 />
                 <Metric
+                  label="Tx"
+                  value={
+                    contract?.transactionHash
+                      ? `${contract.transactionHash.slice(0, 10)}...`
+                      : "pending"
+                  }
+                />
+                <Metric
                   label="Submission"
                   value={job.submissionNotes ? "noted" : "pending"}
                 />
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Link
-                  className="inline-flex h-10 items-center rounded-[8px] bg-[var(--accent)] px-4 text-[12px] font-bold text-[var(--accent-contrast)]"
-                  href={`/submit-work?job=${job.id}`}
-                >
-                  Open submission
-                </Link>
-                <Link
-                  className="inline-flex h-10 items-center rounded-[8px] border border-[var(--border-strong)] px-4 text-[12px] font-bold text-[var(--text-primary)]"
-                  href={`/ai-review?job=${job.id}`}
-                >
-                  Review context
-                </Link>
-              </div>
+              <JobLifecycleActions contract={contract ?? null} job={job} />
             </article>
           );
         })}

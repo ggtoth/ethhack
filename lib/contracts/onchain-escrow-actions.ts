@@ -1,4 +1,11 @@
-import { getAddress, parseEther, stringToHex, type Address } from "viem";
+import {
+  encodeFunctionData,
+  getAddress,
+  keccak256,
+  parseEther,
+  stringToHex,
+  type Address,
+} from "viem";
 
 import { smartJobsEscrowAbi } from "@/lib/contracts/smartjobs-escrow-abi";
 import { SEPOLIA_CHAIN_ID, SEPOLIA_CHAIN_ID_DECIMAL } from "@/lib/wallet/ethereum";
@@ -22,9 +29,11 @@ type OnChainEscrowCall = {
   chainId: number;
   chainIdHex: string;
   contractAddress: Address;
+  to: Address;
   abi: typeof smartJobsEscrowAbi;
   functionName: EscrowContractFunctionName;
   args: readonly unknown[];
+  data: `0x${string}`;
   value?: `0x${string}`;
 };
 
@@ -62,11 +71,13 @@ export function buildOnChainEscrowAction({
 
   assertActionAllowed(contract, input.action);
 
-  const escrowId = stringToHex(contract.id, { size: 32 });
+  const escrowId = makeEscrowId(contract.id);
   const call = makeCall({
     action: input.action,
     contractAddress,
     escrowId,
+    fundedAmountEth: String(contract.amount),
+    bidAmountEth: input.bidAmountEth,
     freelancerWalletAddress: input.freelancerWalletAddress,
     disputeReason: input.disputeReason,
   });
@@ -81,6 +92,7 @@ export function buildOnChainEscrowAction({
         action: input.action,
         freelancerId: input.freelancerId,
         freelancerWalletAddress: input.freelancerWalletAddress,
+        bidAmountEth: input.bidAmountEth,
         disputeReason: input.disputeReason,
         transactionHash: "0x...",
       },
@@ -97,18 +109,18 @@ export function buildOnChainEscrowFunding(input: PrepareOnChainEscrowFundingInpu
 
   const jobId = input.jobId ?? `job_${crypto.randomUUID()}`;
   const contractId = input.contractId ?? `contract_${jobId}`;
-  const escrowId = stringToHex(contractId, { size: 32 });
+  const escrowId = makeEscrowId(contractId);
   const valueWei = parseEther(input.amountEth);
 
   return {
     jobId,
     contractId,
-    transaction: {
+    transaction: withEncodedData({
       ...baseCall(contractAddress),
       functionName: "createEscrow" as const,
       args: [escrowId, jobId],
       value: toHexQuantity(valueWei),
-    },
+    }),
     confirmation: {
       method: "POST",
       href: "/escrow-contracts/onchain/fund/confirm",
@@ -139,12 +151,16 @@ function makeCall({
   action,
   contractAddress,
   escrowId,
+  fundedAmountEth,
+  bidAmountEth,
   freelancerWalletAddress,
   disputeReason,
 }: {
   action: OnChainEscrowAction;
   contractAddress: Address;
   escrowId: `0x${string}`;
+  fundedAmountEth: string;
+  bidAmountEth?: string;
   freelancerWalletAddress?: string;
   disputeReason?: string;
 }): OnChainEscrowCall {
@@ -156,41 +172,45 @@ function makeCall({
         );
       }
 
-      return {
+      return withEncodedData({
         ...baseCall(contractAddress),
         functionName: "lockEscrow",
-        args: [escrowId, getAddress(freelancerWalletAddress)],
-      };
+        args: [
+          escrowId,
+          getAddress(freelancerWalletAddress),
+          parseEther(bidAmountEth ?? fundedAmountEth),
+        ],
+      });
     case "request_release":
-      return {
+      return withEncodedData({
         ...baseCall(contractAddress),
         functionName: "requestRelease",
         args: [escrowId],
-      };
+      });
     case "release":
-      return {
+      return withEncodedData({
         ...baseCall(contractAddress),
         functionName: "release",
         args: [escrowId],
-      };
+      });
     case "refund":
-      return {
+      return withEncodedData({
         ...baseCall(contractAddress),
         functionName: "refund",
         args: [escrowId],
-      };
+      });
     case "dispute":
-      return {
+      return withEncodedData({
         ...baseCall(contractAddress),
         functionName: "openDispute",
         args: [escrowId, disputeReason ?? "Dispute opened."],
-      };
+      });
     case "cancel":
-      return {
+      return withEncodedData({
         ...baseCall(contractAddress),
         functionName: "cancel",
         args: [escrowId],
-      };
+      });
   }
 }
 
@@ -199,12 +219,35 @@ function baseCall(contractAddress: Address) {
     chainId: SEPOLIA_CHAIN_ID_DECIMAL,
     chainIdHex: SEPOLIA_CHAIN_ID,
     contractAddress,
+    to: contractAddress,
     abi: smartJobsEscrowAbi,
+  };
+}
+
+function withEncodedData<
+  T extends {
+    abi: typeof smartJobsEscrowAbi;
+    functionName: EscrowContractFunctionName;
+    args: readonly unknown[];
+  },
+>(call: T) {
+  return {
+    ...call,
+    args: call.args.map((arg) => (typeof arg === "bigint" ? arg.toString() : arg)),
+    data: encodeFunctionData({
+      abi: call.abi,
+      functionName: call.functionName,
+      args: call.args as never,
+    }),
   };
 }
 
 function toHexQuantity(value: bigint): `0x${string}` {
   return `0x${value.toString(16)}`;
+}
+
+function makeEscrowId(value: string): `0x${string}` {
+  return keccak256(stringToHex(value));
 }
 
 export class MissingEscrowAddressError extends Error {

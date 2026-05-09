@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { SubmitWorkForm } from "@/components/submit-work-form";
 import { getDummyJobWithContract } from "@/lib/workflow/dummy-endpoints";
 
+export const dynamic = "force-dynamic";
+
 type SubmitWorkPageProps = {
   searchParams: Promise<{ job?: string | string[]; jobId?: string | string[] }>;
 };

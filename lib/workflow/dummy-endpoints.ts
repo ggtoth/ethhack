@@ -40,6 +40,7 @@ type DummySubmitInput = {
   finalFile?: DummyFile | null;
   submittedSourceFiles?: DummyFile[];
   submissionNotes?: string | null;
+  requestReleaseOnChain?: boolean;
 };
 
 const DUMMY_CLIENT_ID = "user_123";
@@ -157,6 +158,7 @@ const seedContracts: DummyEscrowContract[] = [
     clientWalletAddress: "0x0000000000000000000000000000000000000123",
     freelancerWalletAddress: "0x0000000000000000000000000000000000000456",
     amount: 100,
+    bidAmount: 100,
     currency: DEFAULT_ESCROW_CURRENCY,
     status: "released",
     fundedAt: seedTimestamp,
@@ -187,6 +189,7 @@ const seedContracts: DummyEscrowContract[] = [
     clientWalletAddress: "0x0000000000000000000000000000000000000abc",
     freelancerWalletAddress: "0x0000000000000000000000000000000000000def",
     amount: 250,
+    bidAmount: 250,
     currency: DEFAULT_ESCROW_CURRENCY,
     status: "locked",
     fundedAt: seedTimestamp,
@@ -217,6 +220,7 @@ const seedContracts: DummyEscrowContract[] = [
     clientWalletAddress: "0x0000000000000000000000000000000000000789",
     freelancerWalletAddress: null,
     amount: 80,
+    bidAmount: 0,
     currency: DEFAULT_ESCROW_CURRENCY,
     status: "funded",
     fundedAt: seedTimestamp,
@@ -241,7 +245,15 @@ const seedContracts: DummyEscrowContract[] = [
   }),
 ];
 
-const store = createSeededStore();
+const globalForDummyStore = globalThis as typeof globalThis & {
+  __smartjobsDummyStore?: DummyStore;
+};
+
+const store = globalForDummyStore.__smartjobsDummyStore ?? createSeededStore();
+
+if (globalForDummyStore.__smartjobsDummyStore === undefined) {
+  globalForDummyStore.__smartjobsDummyStore = store;
+}
 
 export function resetDummyStoreForTests() {
   const nextStore = createSeededStore();
@@ -306,7 +318,7 @@ export function getDummyJobWithContract(jobId: string) {
 export function createDummyJob(input: unknown = {}) {
   const parsedInput = CreateJobInputSchema.parse(input);
   const now = new Date().toISOString();
-  const id = parsedInput.id ?? `job_new_${store.nextJobNumber++}`;
+  const id = parsedInput.id ?? makeGeneratedJobId();
   const contractId = parsedInput.contractId ?? `contract_${id}`;
   const job = parseJob({
     id,
@@ -335,32 +347,67 @@ export function createDummyJob(input: unknown = {}) {
     jobId: id,
     clientId: job.createdBy,
     freelancerId: job.assignedTo,
-    clientWalletAddress: parsedInput.escrow?.clientWalletAddress ?? null,
-    freelancerWalletAddress: parsedInput.escrow?.freelancerWalletAddress ?? null,
+    clientWalletAddress: pickNullableDefined(
+      parsedInput.escrow?.clientWalletAddress,
+      null,
+    ),
+    freelancerWalletAddress: pickNullableDefined(
+      parsedInput.escrow?.freelancerWalletAddress,
+      null,
+    ),
     amount: parsedInput.escrow?.amount ?? job.budget,
+    bidAmount: parsedInput.escrow?.bidAmount ?? 0,
     currency: parsedInput.escrow?.currency ?? DEFAULT_ESCROW_CURRENCY,
     status: parsedInput.escrow?.status ?? getInitialEscrowStatus(job.status),
-    fundedAt: parsedInput.escrow?.fundedAt ?? now,
-    lockedAt: parsedInput.escrow?.lockedAt ?? null,
-    releaseRequestedAt: parsedInput.escrow?.releaseRequestedAt ?? null,
-    releasedAt: parsedInput.escrow?.releasedAt ?? null,
-    disputedAt: parsedInput.escrow?.disputedAt ?? null,
-    cancelledAt: parsedInput.escrow?.cancelledAt ?? null,
-    transactionHash: parsedInput.escrow?.transactionHash ?? `0xmock${id}`,
-    chainId: parsedInput.escrow?.chainId ?? 1,
-    escrowAddress:
-      parsedInput.escrow?.escrowAddress ??
+    fundedAt: pickNullableDefined(parsedInput.escrow?.fundedAt, now),
+    lockedAt: pickNullableDefined(parsedInput.escrow?.lockedAt, null),
+    releaseRequestedAt: pickNullableDefined(
+      parsedInput.escrow?.releaseRequestedAt,
+      null,
+    ),
+    releasedAt: pickNullableDefined(parsedInput.escrow?.releasedAt, null),
+    disputedAt: pickNullableDefined(parsedInput.escrow?.disputedAt, null),
+    cancelledAt: pickNullableDefined(parsedInput.escrow?.cancelledAt, null),
+    transactionHash: pickNullableDefined(
+      parsedInput.escrow?.transactionHash,
+      `0xmock${id}`,
+    ),
+    chainId: pickNullableDefined(parsedInput.escrow?.chainId, 1),
+    escrowAddress: pickNullableDefined(
+      parsedInput.escrow?.escrowAddress,
       `0x${id.replaceAll("_", "").padStart(40, "0").slice(-40)}`,
+    ),
     fundingTransactionHash:
-      parsedInput.escrow?.fundingTransactionHash ?? `0xmockfunded${id}`,
-    lockTransactionHash: parsedInput.escrow?.lockTransactionHash ?? null,
+      pickNullableDefined(
+        parsedInput.escrow?.fundingTransactionHash,
+        `0xmockfunded${id}`,
+      ),
+    lockTransactionHash: pickNullableDefined(
+      parsedInput.escrow?.lockTransactionHash,
+      null,
+    ),
     releaseRequestTransactionHash:
-      parsedInput.escrow?.releaseRequestTransactionHash ?? null,
-    releaseTransactionHash: parsedInput.escrow?.releaseTransactionHash ?? null,
-    refundTransactionHash: parsedInput.escrow?.refundTransactionHash ?? null,
-    disputeTransactionHash: parsedInput.escrow?.disputeTransactionHash ?? null,
-    cancelTransactionHash: parsedInput.escrow?.cancelTransactionHash ?? null,
-    disputeReason: parsedInput.escrow?.disputeReason ?? null,
+      pickNullableDefined(
+        parsedInput.escrow?.releaseRequestTransactionHash,
+        null,
+      ),
+    releaseTransactionHash: pickNullableDefined(
+      parsedInput.escrow?.releaseTransactionHash,
+      null,
+    ),
+    refundTransactionHash: pickNullableDefined(
+      parsedInput.escrow?.refundTransactionHash,
+      null,
+    ),
+    disputeTransactionHash: pickNullableDefined(
+      parsedInput.escrow?.disputeTransactionHash,
+      null,
+    ),
+    cancelTransactionHash: pickNullableDefined(
+      parsedInput.escrow?.cancelTransactionHash,
+      null,
+    ),
+    disputeReason: pickNullableDefined(parsedInput.escrow?.disputeReason, null),
     createdAt: now,
     updatedAt: now,
   });
@@ -486,8 +533,13 @@ export function acceptDummyJob(jobId: string) {
     return null;
   }
 
+  const currentContract = store.contracts.get(job.contractId);
+
   updateDummyContract(job.contractId, {
     freelancerId: DUMMY_FREELANCER_ID,
+    bidAmount: currentContract?.bidAmount && currentContract.bidAmount > 0
+      ? currentContract.bidAmount
+      : currentContract?.amount,
     status: "locked",
     lockedAt: new Date().toISOString(),
   });
@@ -620,9 +672,12 @@ export function submitDummyJob(jobId: string, input: DummySubmitInput = {}) {
     return null;
   }
 
-  const contractResult = applyDummyEscrowContractAction(updatedJob.contractId, {
-    action: "request_release",
-  });
+  const contractResult =
+    input.requestReleaseOnChain === false
+      ? { contract: getDummyEscrowContract(updatedJob.contractId) }
+      : applyDummyEscrowContractAction(updatedJob.contractId, {
+          action: "request_release",
+        });
 
   return {
     id: updatedJob.id,
@@ -755,6 +810,7 @@ function transitionContract(
       return parseContract({
         ...contract,
         status: "funded",
+        bidAmount: 0,
         fundedAt: now,
         transactionHash,
         fundingTransactionHash: transactionHash,
@@ -769,6 +825,7 @@ function transitionContract(
         freelancerId: input.freelancerId ?? contract.freelancerId,
         freelancerWalletAddress:
           input.freelancerWalletAddress ?? contract.freelancerWalletAddress,
+        bidAmount: input.bidAmount ?? contract.amount,
         status: "locked",
         lockedAt: now,
         transactionHash,
@@ -935,6 +992,16 @@ function makeAiReview(jobId: string): DummyAiReview {
     summary: "The delivery mostly satisfies the job requirements.",
     issues: ["Source file is missing"],
   };
+}
+
+function makeGeneratedJobId() {
+  const suffix = `${Date.now()}_${store.nextJobNumber++}_${crypto.randomUUID().slice(0, 8)}`;
+
+  return `job_new_${suffix}`;
+}
+
+function pickNullableDefined<T>(value: T | null | undefined, fallback: T) {
+  return value === undefined ? fallback : value;
 }
 
 function parseJob(value: unknown) {

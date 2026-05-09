@@ -59,3 +59,32 @@ export function getWalletName(provider: EthereumProvider | null) {
 
   return provider ? "wallet" : "wallet";
 }
+
+export async function ensureSepoliaNetwork(provider: EthereumProvider) {
+  const activeChainId = await provider.request<string>({ method: "eth_chainId" });
+
+  if (activeChainId === SEPOLIA_CHAIN_ID) {
+    return;
+  }
+
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    });
+  } catch (switchError) {
+    const code =
+      typeof switchError === "object" && switchError && "code" in switchError
+        ? Number((switchError as { code: unknown }).code)
+        : 0;
+
+    if (code !== 4902) {
+      throw switchError;
+    }
+
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [SEPOLIA_PARAMS],
+    });
+  }
+}

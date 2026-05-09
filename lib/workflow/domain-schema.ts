@@ -89,6 +89,7 @@ export const EscrowContractSchema = z.object({
   clientWalletAddress: WalletAddressSchema.nullable().default(null),
   freelancerWalletAddress: WalletAddressSchema.nullable().default(null),
   amount: z.number().nonnegative(),
+  bidAmount: z.number().nonnegative().default(0),
   currency: z.string().trim().min(1),
   status: EscrowContractStatusSchema,
   fundedAt: IsoDateTimeSchema.nullable(),
@@ -132,6 +133,7 @@ export const CreateJobInputSchema = z.object({
   escrow: z
     .object({
       amount: z.number().nonnegative().optional(),
+      bidAmount: z.number().nonnegative().optional(),
       currency: z.string().trim().min(1).optional(),
       status: EscrowContractStatusSchema.optional(),
       fundedAt: IsoDateTimeSchema.nullable().optional(),
@@ -165,6 +167,7 @@ export const UpdateJobInputSchema = JobSchema.partial().omit({
 });
 
 export const UpdateEscrowContractInputSchema = EscrowContractSchema.pick({
+  bidAmount: true,
   clientWalletAddress: true,
   freelancerWalletAddress: true,
   fundedAt: true,
@@ -194,6 +197,7 @@ export const EscrowContractActionInputSchema = z.object({
   freelancerId: DomainIdSchema.optional(),
   clientWalletAddress: WalletAddressSchema.optional(),
   freelancerWalletAddress: WalletAddressSchema.optional(),
+  bidAmount: z.number().nonnegative().optional(),
   disputeReason: z.string().trim().min(1).optional(),
 });
 
@@ -201,6 +205,7 @@ export const PrepareOnChainEscrowActionInputSchema = z.object({
   action: OnChainEscrowActionSchema,
   freelancerId: DomainIdSchema.optional(),
   freelancerWalletAddress: WalletAddressSchema.optional(),
+  bidAmountEth: z.string().trim().min(1).optional(),
   disputeReason: z.string().trim().min(1).optional(),
 });
 
@@ -210,6 +215,7 @@ export const ConfirmOnChainEscrowActionInputSchema = z.object({
   clientWalletAddress: WalletAddressSchema.optional(),
   freelancerId: DomainIdSchema.optional(),
   freelancerWalletAddress: WalletAddressSchema.optional(),
+  bidAmountEth: z.string().trim().min(1).optional(),
   disputeReason: z.string().trim().min(1).optional(),
 });
 

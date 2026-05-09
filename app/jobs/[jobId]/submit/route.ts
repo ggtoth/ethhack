@@ -20,6 +20,10 @@ export async function POST(request: Request, context: JobActionContext) {
       typeof body.submissionNotes === "string"
         ? body.submissionNotes.trim() || null
         : undefined,
+    requestReleaseOnChain:
+      typeof body.requestReleaseOnChain === "boolean"
+        ? body.requestReleaseOnChain
+        : undefined,
   });
 
   if (!result) {

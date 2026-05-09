@@ -2,9 +2,16 @@
   "name": "smartjobs",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "contracts:compile": "hardhat compile",
+    "contracts:test": "hardhat test nodejs",
+    "contracts:deploy:sepolia": "hardhat ignition deploy ignition/modules/SmartJobsEscrow.ts --network sepolia",
+    "contracts:deploy:sepolia:verify": "hardhat ignition deploy ignition/modules/SmartJobsEscrow.ts --network sepolia --verify",
+    "contracts:verify:sepolia": "hardhat verify --network sepolia",
+    "contracts:verify:deployment:sepolia": "hardhat ignition verify --network sepolia",
     "start": "next start",
     "lint": "eslint",
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/run-tests.ps1"
@@ -24,6 +31,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.5",
+    "hardhat": "^3.4.5",
+    "typescript": "^5",
+    "viem": "^2.48.11"
   }
 }

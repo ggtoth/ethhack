@@ -32,6 +32,7 @@ export async function POST(
 
   try {
     const input = ConfirmOnChainEscrowActionInputSchema.parse(body);
+    const bidAmount = getBidAmount(input.action, input.bidAmountEth, contract.amount);
 
     assertActionAllowed(contract, input.action);
 
@@ -49,6 +50,7 @@ export async function POST(
       freelancerWalletAddress: input.freelancerWalletAddress
         ? getAddress(input.freelancerWalletAddress)
         : undefined,
+      bidAmount,
       disputeReason: input.disputeReason,
     });
 
@@ -98,4 +100,24 @@ async function readJson(request: Request) {
   } catch {
     return {};
   }
+}
+
+function getBidAmount(
+  action: "lock" | "request_release" | "release" | "refund" | "dispute" | "cancel",
+  bidAmountEth: string | undefined,
+  fundedAmount: number,
+) {
+  if (action !== "lock") {
+    return undefined;
+  }
+
+  const parsed = Number(bidAmountEth ?? fundedAmount);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new MissingOnChainActionDetailError(
+      "bidAmountEth must be a positive ETH amount to confirm locked escrow.",
+    );
+  }
+
+  return parsed;
 }

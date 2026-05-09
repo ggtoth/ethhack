@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { getAddress } from "viem";
+
+import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
 
 type JobRecord = {
   job: {
@@ -16,7 +19,9 @@ type JobRecord = {
     status: string;
   };
   contract: {
+    id: string;
     status: string;
+    freelancerWalletAddress: string | null;
   };
 };
 
@@ -61,7 +66,12 @@ export function SubmitWorkForm({ record }: { record: JobRecord }) {
         finalFile,
         submittedSourceFiles: [submittedSourceFile],
         submissionNotes: notes.trim() || null,
+        requestReleaseOnChain: false,
       });
+      await requestReleaseFromWallet(
+        record.contract.id,
+        record.contract.freelancerWalletAddress,
+      );
 
       router.push(`/ai-review?job=${encodeURIComponent(record.job.id)}`);
       router.refresh();
@@ -165,6 +175,65 @@ export function SubmitWorkForm({ record }: { record: JobRecord }) {
   );
 }
 
+async function requestReleaseFromWallet(
+  contractId: string,
+  freelancerWalletAddress: string | null,
+) {
+  const provider = getEthereumProvider();
+
+  if (!provider) {
+    throw new Error("Connect a wallet to request escrow release on-chain.");
+  }
+
+  const accounts = await provider.request<string[]>({
+    method: "eth_requestAccounts",
+  });
+  const from = accounts[0];
+
+  if (!from) {
+    throw new Error("No wallet account selected.");
+  }
+
+  if (
+    freelancerWalletAddress &&
+    getAddress(from) !== getAddress(freelancerWalletAddress)
+  ) {
+    throw new Error(
+      `Connect the locked freelancer wallet (${freelancerWalletAddress}) before requesting release.`,
+    );
+  }
+
+  await ensureSepoliaNetwork(provider);
+
+  const prepared = await postJson(
+    `/escrow-contracts/${contractId}/onchain/prepare`,
+    {
+      action: "request_release",
+    },
+  );
+
+  if (!isPreparedTransaction(prepared)) {
+    throw new Error("Escrow release request could not be prepared.");
+  }
+
+  const transactionHash = await provider.request<string>({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from,
+        to: prepared.transaction.to,
+        value: prepared.transaction.value ?? "0x0",
+        data: prepared.transaction.data,
+      },
+    ],
+  });
+
+  await postJson(`/escrow-contracts/${contractId}/onchain/confirm`, {
+    action: "request_release",
+    transactionHash,
+  });
+}
+
 async function postJson(url: string, body: Record<string, unknown>) {
   const response = await fetch(url, {
     method: "POST",
@@ -181,6 +250,20 @@ async function postJson(url: string, body: Record<string, unknown>) {
   }
 
   return payload;
+}
+
+function isPreparedTransaction(value: unknown): value is {
+  transaction: { to: string; value?: string; data: string };
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "transaction" in value &&
+    typeof (value as { transaction?: { to?: unknown; data?: unknown } }).transaction?.to ===
+      "string" &&
+    typeof (value as { transaction?: { to?: unknown; data?: unknown } }).transaction
+      ?.data === "string"
+  );
 }
 
 function makeStoredFile(jobId: string, kind: string, url: string) {
