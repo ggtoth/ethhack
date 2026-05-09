@@ -3,18 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState, type ChangeEvent } from "react";
 
-type FlowStep = "accepted" | "submitted" | "reviewed";
+import type { ReviewResult } from "@/lib/review/schema";
 
-type AiReviewPayload = {
-  aiReview?: {
-    verdict: "pass" | "needs_revision" | "fail";
-    score: number;
-    summary: string;
-    issues: string[];
-  };
-  message?: string;
-  error?: string;
-};
+type FlowStep = "accepted" | "submitted" | "reviewed";
 
 type StoredFile = {
   id: string;
@@ -33,7 +24,8 @@ export function DeveloperSubmitWorkspace() {
   const [completed, setCompleted] = useState<FlowStep[]>(["accepted"]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Upload the finished work package.");
-  const [deliveryFiles, setDeliveryFiles] = useState<File[]>([]);
+  const [projectFiles, setProjectFiles] = useState<File[]>([]);
+  const [previewFiles, setPreviewFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState("https://demo.app/landing");
   const [sourceUrl, setSourceUrl] = useState("https://github.com/demo/landing-source");
   const [workSummary, setWorkSummary] = useState(
@@ -42,8 +34,8 @@ export function DeveloperSubmitWorkspace() {
   const [collaborationReview, setCollaborationReview] = useState(
     "Clear brief, quick answers, smooth handoff.",
   );
-  const [review, setReview] = useState<AiReviewPayload["aiReview"] | null>(null);
-  const canSubmitWork = deliveryFiles.length > 0 && previewUrl.trim().length > 0;
+  const [review, setReview] = useState<ReviewResult | null>(null);
+  const canSubmitWork = projectFiles.length > 0 && previewFiles.length > 0;
   const progress = useMemo(
     () => Math.round((completed.length / steps.length) * 100),
     [completed.length],
@@ -51,7 +43,7 @@ export function DeveloperSubmitWorkspace() {
 
   async function submitWorkAndReview() {
     if (!canSubmitWork) {
-      setMessage("Add delivery files and a preview URL before submitting.");
+      setMessage("Add project files and preview screenshots before submitting.");
       return;
     }
 
@@ -59,7 +51,7 @@ export function DeveloperSubmitWorkspace() {
     setReview(null);
     setMessage("Submitting work package.");
 
-    const submittedSourceFiles = makeStoredFiles(deliveryFiles, "delivery");
+    const submittedSourceFiles = makeStoredFiles(projectFiles, "delivery");
     const fallbackSource = makeUrlFile(jobId, "source", sourceUrl);
     const sourceFiles = submittedSourceFiles.length > 0
       ? submittedSourceFiles
@@ -91,32 +83,56 @@ export function DeveloperSubmitWorkspace() {
       );
       setMessage("Work submitted. AI review is running.");
 
-      const reviewResponse = await fetch(`/jobs/${jobId}/request-ai-review`, {
-        method: "POST",
-      });
-      const reviewPayload = (await reviewResponse.json()) as AiReviewPayload;
+      const reviewFormData = new FormData();
+      reviewFormData.set("jobId", jobId);
+      reviewFormData.set("contractId", "contract_job_456");
 
-      if (!reviewResponse.ok) {
-        setMessage(reviewPayload.error ?? "The AI review failed.");
+      for (const file of projectFiles) {
+        reviewFormData.append("sources", file);
+      }
+
+      for (const file of previewFiles) {
+        reviewFormData.append("previews", file);
+      }
+
+      const reviewResponse = await fetch("/api/review", {
+        method: "POST",
+        body: reviewFormData,
+      });
+      const reviewPayload = (await reviewResponse.json()) as
+        | ReviewResult
+        | { error?: string };
+
+      if (!reviewResponse.ok || !isReviewResult(reviewPayload)) {
+        setMessage(getReviewError(reviewPayload));
         return;
       }
 
       setCompleted((existing) =>
         existing.includes("reviewed") ? existing : [...existing, "reviewed"],
       );
-      setReview(reviewPayload.aiReview ?? null);
+      setReview(reviewPayload);
       setMessage("AI review is ready for the freelancer and client.");
     } finally {
       setBusy(false);
     }
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleProjectFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    setDeliveryFiles(files);
+    setProjectFiles(files);
 
     if (files.length > 0) {
-      setMessage(`${files.length} file${files.length === 1 ? "" : "s"} selected.`);
+      setMessage(`${files.length} project file${files.length === 1 ? "" : "s"} selected.`);
+    }
+  }
+
+  function handlePreviewFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    setPreviewFiles(files);
+
+    if (files.length > 0) {
+      setMessage(`${files.length} preview file${files.length === 1 ? "" : "s"} selected.`);
     }
   }
 
@@ -146,19 +162,42 @@ export function DeveloperSubmitWorkspace() {
               className="sr-only"
               multiple
               type="file"
-              onChange={handleFileChange}
+              onChange={handleProjectFileChange}
             />
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Delivery files
+              Project files
             </span>
             <span className="text-[18px] font-black text-[var(--text-primary)]">
-              {deliveryFiles.length > 0
-                ? `${deliveryFiles.length} file${deliveryFiles.length === 1 ? "" : "s"} ready`
-                : "Upload files"}
+              {projectFiles.length > 0
+                ? `${projectFiles.length} file${projectFiles.length === 1 ? "" : "s"} ready`
+                : "Upload source package"}
             </span>
-            {deliveryFiles.length > 0 && (
+            {projectFiles.length > 0 && (
               <span className="text-[13px] leading-5 text-[var(--text-secondary)]">
-                {deliveryFiles.map((file) => file.name).join(", ")}
+                {projectFiles.map((file) => file.name).join(", ")}
+              </span>
+            )}
+          </label>
+
+          <label className="delivery-drop grid cursor-pointer gap-2 rounded-[14px] p-4">
+            <input
+              accept=".png,.jpg,.jpeg,.webp,.gif,.pdf"
+              className="sr-only"
+              multiple
+              type="file"
+              onChange={handlePreviewFileChange}
+            />
+            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+              Preview files
+            </span>
+            <span className="text-[18px] font-black text-[var(--text-primary)]">
+              {previewFiles.length > 0
+                ? `${previewFiles.length} preview${previewFiles.length === 1 ? "" : "s"} ready`
+                : "Upload screenshots"}
+            </span>
+            {previewFiles.length > 0 && (
+              <span className="text-[13px] leading-5 text-[var(--text-secondary)]">
+                {previewFiles.map((file) => file.name).join(", ")}
               </span>
             )}
           </label>
@@ -289,13 +328,13 @@ export function DeveloperSubmitWorkspace() {
               AI answer
             </p>
             <div className="mt-2 flex items-end justify-between gap-3">
-              <p className="text-2xl font-black">{Math.round(review.score * 100)}</p>
+              <p className="text-2xl font-black">{getReviewScore(review)}</p>
               <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
-                {review.verdict.replaceAll("_", " ")}
+                {review.comparison_notes.confidence}
               </p>
             </div>
             <p className="mt-3 text-[13px] leading-5 text-[var(--text-secondary)]">
-              {review.summary}
+              {review.user_visible.summary}
             </p>
           </div>
         )}
@@ -370,4 +409,42 @@ function makeSubmissionNotes(workSummary: string, collaborationReview: string) {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function isReviewResult(value: ReviewResult | { error?: string }): value is ReviewResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "schema_version" in value &&
+    "verdicts" in value &&
+    "comparison_notes" in value &&
+    "user_visible" in value
+  );
+}
+
+function getReviewError(value: ReviewResult | { error?: string }) {
+  return "error" in value && value.error ? value.error : "The AI review failed.";
+}
+
+function getReviewScore(review: ReviewResult) {
+  const scores = [
+    verdictToScore(review.verdicts.preview_vs_source.verdict),
+    verdictToScore(review.verdicts.preview_vs_description.verdict),
+    verdictToScore(review.verdicts.source_vs_description.verdict),
+  ];
+
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+}
+
+function verdictToScore(verdict: ReviewResult["verdicts"]["preview_vs_source"]["verdict"]) {
+  switch (verdict) {
+    case "MATCH":
+      return 94;
+    case "PARTIAL_MATCH":
+      return 72;
+    case "MISMATCH":
+      return 32;
+    case "INSUFFICIENT_EVIDENCE":
+      return 45;
+  }
 }
