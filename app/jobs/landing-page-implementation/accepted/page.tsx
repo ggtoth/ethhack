@@ -1,36 +1,34 @@
 import Link from "next/link";
 
 const steps = [
-  ["Offer sent", "Your interest was shared with the client."],
-  ["Client notified", "Orbit Labs gets an email and in-app notification."],
-  ["Waiting for reply", "You will see the next step as soon as they respond."],
+  ["Sent", "Your request is with Orbit Labs."],
+  ["Wait", "We will notify you about every reply, offer, and message."],
 ];
 
 export default function AcceptedJobPage() {
   return (
     <main className="flex flex-1 bg-[var(--background)] px-4 py-8 font-mono text-[var(--text-primary)] sm:px-6 lg:px-8">
-      <section className="mx-auto grid w-full max-w-[860px] gap-4 lg:grid-cols-[1fr_280px]">
-        <div className="accepted-card rounded-[16px] p-5 sm:p-7">
+      <section className="mx-auto grid w-full max-w-[760px] gap-4 lg:grid-cols-[1fr_240px]">
+        <div className="accepted-card rounded-[16px] p-5 sm:p-6">
           <div className="grid h-14 w-14 place-items-center rounded-full bg-[var(--text-primary)] text-xl font-black text-[var(--background)]">
             ✓
           </div>
 
-          <p className="mt-6 text-[12px] font-black uppercase text-[var(--text-muted)]">
-            Job request sent
+          <p className="mt-5 text-[12px] font-black uppercase text-[var(--text-muted)]">
+            Success
           </p>
-          <h1 className="mt-2 max-w-[620px] text-3xl font-black leading-tight sm:text-5xl">
-            Orbit Labs has been notified.
+          <h1 className="mt-2 max-w-[520px] text-3xl font-black leading-tight sm:text-4xl">
+            Now wait for the client.
           </h1>
-          <p className="mt-4 max-w-[620px] text-[15px] leading-7 text-[var(--text-secondary)]">
-            We sent your offer to the client and added it to their app inbox. They
-            will be notified by email and in-app message that a freelancer is ready
-            to start the landing page build.
+          <p className="mt-4 max-w-[500px] text-[15px] leading-6 text-[var(--text-secondary)]">
+            Your request was sent. We will notify you as soon as there is an
+            offer, message, or next step.
           </p>
 
           <div className="mt-6 grid gap-3">
             {steps.map(([title, body], index) => (
               <article
-                className="flex items-start gap-3 rounded-[12px] bg-[var(--surface-strong)] p-4"
+                className="flex items-start gap-3 rounded-[12px] bg-[var(--surface-strong)] p-3.5"
                 key={title}
               >
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--text-primary)] text-[12px] font-black text-[var(--background)]">
@@ -57,19 +55,19 @@ export default function AcceptedJobPage() {
               className="inline-flex h-11 items-center justify-center rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 text-[13px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
               href="/profile?view=freelancer"
             >
-              View freelancer profile
+              Back to profile
             </Link>
           </div>
         </div>
 
-        <aside className="accepted-card self-start rounded-[16px] p-5">
+        <aside className="accepted-card self-start rounded-[16px] p-4">
           <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
             Active job
           </p>
-          <h2 className="mt-2 text-xl font-black leading-tight">
+          <h2 className="mt-2 text-lg font-black leading-tight">
             Landing page design
           </h2>
-          <div className="mt-5 rounded-[12px] bg-[var(--text-primary)] p-4 text-[var(--background)]">
+          <div className="mt-4 rounded-[12px] bg-[var(--text-primary)] p-4 text-[var(--background)]">
             <p className="text-[11px] font-black uppercase opacity-65">
               Escrow
             </p>
@@ -78,8 +76,8 @@ export default function AcceptedJobPage() {
               Funded
             </p>
           </div>
-          <p className="mt-4 text-[13px] leading-6 text-[var(--text-secondary)]">
-            This is a demo notification state. No backend email is sent yet.
+          <p className="mt-4 rounded-[12px] bg-[var(--surface-strong)] p-3 text-[13px] font-black leading-5 text-[var(--text-primary)]">
+            Notifications are on.
           </p>
         </aside>
       </section>
