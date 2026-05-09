@@ -9,12 +9,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const navItems = [
   { href: "/", label: "Start" },
   { href: "/wallet", label: "Wallet" },
+  { href: "/messages", label: "Inbox", kind: "inbox" },
   { href: "/post-job", label: "Create" },
   { href: "/browse-jobs", label: "Jobs" },
   { href: "/submit-work", label: "Proof" },
   { href: "/ai-review", label: "Review" },
-  { href: "/profile?view=customer", label: "Customer profile" },
-  { href: "/profile?view=freelancer", label: "Freelancer profile" },
+  { href: "/profile?view=customer", label: "Customer" },
+  { href: "/profile?view=freelancer", label: "Freelancer" },
 ];
 
 export function AppNavbar() {
@@ -42,14 +43,14 @@ export function AppNavbar() {
           </span>
         </Link>
 
-        <div className="hidden items-center gap-5 lg:flex xl:gap-7">
+        <div className="hidden items-center gap-4 lg:flex xl:gap-6">
           <ThemeToggle />
           {navItems.map((item) => {
             const active = isActiveNavItem(item.href, pathname, searchParams);
 
             return (
               <Link
-                className={`text-[14px] font-black uppercase tracking-normal transition ${
+                className={`flex items-center gap-2 text-[13px] font-black uppercase tracking-normal transition ${
                   active
                     ? "text-[var(--text-primary)]"
                     : "text-[var(--text-primary)] hover:text-[var(--text-muted)]"
@@ -57,7 +58,8 @@ export function AppNavbar() {
                 href={item.href}
                 key={item.href}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.kind === "inbox" && <InboxIndicator />}
               </Link>
             );
           })}
@@ -85,7 +87,7 @@ export function AppNavbar() {
 
               return (
                 <Link
-                  className={`rounded-[9px] border px-3 py-3 text-center text-[12px] font-black uppercase ${
+                  className={`flex items-center justify-center gap-2 rounded-[9px] border px-3 py-3 text-center text-[12px] font-black uppercase ${
                     active
                       ? "border-[var(--border-strong)] bg-[var(--surface-strong)] text-[var(--text-primary)]"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]"
@@ -94,7 +96,8 @@ export function AppNavbar() {
                   key={item.href}
                   onClick={() => setOpen(false)}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.kind === "inbox" && <InboxIndicator />}
                 </Link>
               );
             })}
@@ -102,6 +105,15 @@ export function AppNavbar() {
         </div>
       )}
     </header>
+  );
+}
+
+function InboxIndicator() {
+  return (
+    <span className="relative grid h-7 w-7 place-items-center rounded-full bg-[#f45b63] text-[12px] font-black text-white">
+      B
+      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--background)] bg-[#20c878]" />
+    </span>
   );
 }
 
