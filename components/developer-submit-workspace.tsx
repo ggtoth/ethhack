@@ -40,7 +40,7 @@ export function DeveloperSubmitWorkspace() {
     "Built the responsive landing page, connected the contact section, and included desktop/mobile screenshots.",
   );
   const [collaborationReview, setCollaborationReview] = useState(
-    "The client gave a clear brief, answered quickly, and the scope stayed consistent.",
+    "Clear brief, quick answers, smooth handoff.",
   );
   const [review, setReview] = useState<AiReviewPayload["aiReview"] | null>(null);
   const canSubmitWork = deliveryFiles.length > 0 && previewUrl.trim().length > 0;
@@ -196,9 +196,22 @@ export function DeveloperSubmitWorkspace() {
             />
           </label>
 
-          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
-            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Client collaboration
+          <label className="grid gap-3 rounded-[12px] bg-[var(--surface-strong)] p-3">
+            <span className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--text-primary)] text-[12px] font-black text-[var(--background)]">
+                  OL
+                </span>
+                <span>
+                  <span className="block text-[13px] font-black">Orbit Labs</span>
+                  <span className="block text-[11px] font-black uppercase text-[var(--text-muted)]">
+                    Client review
+                  </span>
+                </span>
+              </span>
+              <span className="text-[13px] font-black text-[var(--text-primary)]">
+                5.0
+              </span>
             </span>
             <textarea
               className="min-h-20 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[14px] leading-6 outline-none"
