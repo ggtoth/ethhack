@@ -109,7 +109,9 @@ export default function ReviewPage() {
           </div>
 
           <p className="mx-auto mt-5 max-w-[340px] text-[14px] leading-6 text-[var(--text-secondary)]">
-            {summary}
+            {display.canDownload
+              ? summary
+              : "No worries. We will email you when there is an update."}
           </p>
 
           {display.canDownload ? (
@@ -128,6 +130,17 @@ export default function ReviewPage() {
             >
               Download blocked
             </button>
+          )}
+
+          {!display.canDownload && (
+            <div className="mx-auto mt-4 max-w-[380px] rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-left">
+              <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+                If you want the reason
+              </p>
+              <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {summary}
+              </p>
+            </div>
           )}
         </div>
       </section>
