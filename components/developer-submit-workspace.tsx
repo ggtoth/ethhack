@@ -36,8 +36,11 @@ export function DeveloperSubmitWorkspace() {
   const [deliveryFiles, setDeliveryFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState("https://demo.app/landing");
   const [sourceUrl, setSourceUrl] = useState("https://github.com/demo/landing-source");
-  const [notes, setNotes] = useState(
-    "Responsive landing page completed. Source, preview, and screenshots are included.",
+  const [workSummary, setWorkSummary] = useState(
+    "Built the responsive landing page, connected the contact section, and included desktop/mobile screenshots.",
+  );
+  const [collaborationReview, setCollaborationReview] = useState(
+    "The client gave a clear brief, answered quickly, and the scope stayed consistent.",
   );
   const [review, setReview] = useState<AiReviewPayload["aiReview"] | null>(null);
   const canSubmitWork = deliveryFiles.length > 0 && previewUrl.trim().length > 0;
@@ -72,7 +75,7 @@ export function DeveloperSubmitWorkspace() {
           previewFile,
           finalFile,
           submittedSourceFiles: sourceFiles,
-          submissionNotes: notes.trim() || null,
+          submissionNotes: makeSubmissionNotes(workSummary, collaborationReview),
           requestReleaseOnChain: false,
         }),
       });
@@ -173,7 +176,7 @@ export function DeveloperSubmitWorkspace() {
 
           <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Source URL
+              Project files
             </span>
             <input
               className="h-10 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[14px] font-bold outline-none"
@@ -184,12 +187,23 @@ export function DeveloperSubmitWorkspace() {
 
           <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Notes
+              What did you complete?
             </span>
             <textarea
               className="min-h-20 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[14px] leading-6 outline-none"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              value={workSummary}
+              onChange={(event) => setWorkSummary(event.target.value)}
+            />
+          </label>
+
+          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
+            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+              Client collaboration
+            </span>
+            <textarea
+              className="min-h-20 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[14px] leading-6 outline-none"
+              value={collaborationReview}
+              onChange={(event) => setCollaborationReview(event.target.value)}
             />
           </label>
         </div>
@@ -331,4 +345,16 @@ function makeUrlFile(job: string, role: string, url: string): StoredFile {
     url: trimmed || `local-demo://${role}`,
     filename,
   };
+}
+
+function makeSubmissionNotes(workSummary: string, collaborationReview: string) {
+  const summary = workSummary.trim();
+  const collaboration = collaborationReview.trim();
+
+  return [
+    summary ? `Work completed: ${summary}` : null,
+    collaboration ? `Client collaboration: ${collaboration}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
