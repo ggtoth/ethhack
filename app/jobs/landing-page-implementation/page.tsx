@@ -43,7 +43,7 @@ export default function JobDetailPage() {
 
           <Link
             className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] sm:w-auto"
-            href="/profile"
+            href="/jobs/landing-page-implementation/accepted"
           >
             Accept job
           </Link>
