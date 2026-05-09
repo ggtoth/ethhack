@@ -17,6 +17,7 @@ try {
   }
 
   New-Item -ItemType Directory -Force -Path $aliasRoot | Out-Null
+  Set-Content -LiteralPath (Join-Path $dist "package.json") -Value '{ "type": "commonjs" }'
   Copy-Item -LiteralPath (Join-Path $dist "lib") -Destination $aliasLib -Recurse
 
   $testFiles = Get-ChildItem -LiteralPath (Join-Path $dist "tests") -Recurse -Filter "*.test.js" |

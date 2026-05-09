@@ -232,6 +232,7 @@ describe("workflow route handlers", () => {
           action: "lock",
           freelancerId: "freelancer_wallet_test",
           freelancerWalletAddress: "0x0000000000000000000000000000000000000abc",
+          bidAmountEth: "0.05",
         }),
       }),
       contractContext("contract_job_789"),
@@ -242,6 +243,7 @@ describe("workflow route handlers", () => {
     assert.equal(prepared.transaction.chainId, 11155111);
     assert.equal(prepared.transaction.functionName, "lockEscrow");
     assert.equal(prepared.transaction.args[1], "0x0000000000000000000000000000000000000aBc");
+    assert.equal(prepared.transaction.args[2], "50000000000000000");
     assert.equal(
       prepared.confirmation.href,
       "/escrow-contracts/contract_job_789/onchain/confirm",
@@ -255,6 +257,7 @@ describe("workflow route handlers", () => {
           transactionHash: "0xlock789",
           freelancerId: "freelancer_wallet_test",
           freelancerWalletAddress: "0x0000000000000000000000000000000000000abc",
+          bidAmountEth: "0.05",
         }),
       }),
       contractContext("contract_job_789"),
@@ -263,6 +266,7 @@ describe("workflow route handlers", () => {
 
     assert.equal(confirm.status, 200);
     assert.equal(confirmed.contract.status, "locked");
+    assert.equal(confirmed.contract.bidAmount, 0.05);
     assert.equal(confirmed.contract.freelancerId, "freelancer_wallet_test");
     assert.equal(
       confirmed.contract.freelancerWalletAddress,
@@ -318,6 +322,7 @@ describe("workflow route handlers", () => {
     assert.equal(confirmed.contract.status, "funded");
     assert.equal(confirmed.contract.fundingTransactionHash, "0xfunded");
     assert.equal(confirmed.contract.amount, 0.25);
+    assert.equal(confirmed.contract.bidAmount, 0);
     assert.equal(confirmed.contract.chainId, 11155111);
     assert.equal(
       confirmed.contract.escrowAddress,

@@ -50,6 +50,7 @@ describe("workflow domain schemas", () => {
       clientWalletAddress: "0x0000000000000000000000000000000000000001",
       freelancerWalletAddress: null,
       amount: 42,
+      bidAmount: 21,
       currency: "ETH",
       status: "funded",
       fundedAt: "2026-05-08T00:00:00.000Z",
@@ -75,6 +76,7 @@ describe("workflow domain schemas", () => {
 
     assert.equal(parsed.jobId, "job_schema");
     assert.equal(parsed.status, "funded");
+    assert.equal(parsed.bidAmount, 21);
     assert.equal(parsed.chainId, 1);
   });
 
@@ -84,7 +86,7 @@ describe("workflow domain schemas", () => {
         title: "Create input",
         budget: 3,
         submittedSourceFiles: [],
-        escrow: { currency: "ETH" },
+        escrow: { currency: "ETH", bidAmount: 1.5 },
       }).title,
       "Create input",
     );
@@ -98,6 +100,7 @@ describe("workflow domain schemas", () => {
     );
     assert.equal(
       UpdateEscrowContractInputSchema.parse({
+        bidAmount: 0.5,
         disputeReason: "The submitted work does not match the brief.",
       }).disputeReason,
       "The submitted work does not match the brief.",

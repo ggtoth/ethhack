@@ -81,6 +81,7 @@ describe("workflow dummy in-memory store", () => {
     assert.equal(created.contract.id, "contract_job_new_1");
     assert.equal(created.contract.jobId, "job_new_1");
     assert.equal(created.contract.amount, 150);
+    assert.equal(created.contract.bidAmount, 0);
     assert.equal(created.contract.status, "funded");
     assert.equal(created.contract.chainId, 1);
     assert.equal(created.contract.fundingTransactionHash, "0xmockfundedjob_new_1");
@@ -126,6 +127,7 @@ describe("workflow dummy in-memory store", () => {
     assert.equal(accepted?.status, "in_progress");
     assert.equal(accepted?.assignedTo, "freelancer_123");
     assert.equal(accepted?.contract?.status, "locked");
+    assert.equal(accepted?.contract?.bidAmount, 80);
     assert.equal(accepted?.message, "Job accepted by freelancer");
     assert.equal(getDummyJob("job_789")?.assignedTo, "freelancer_123");
     assert.equal(getDummyEscrowContractForJob("job_789")?.freelancerId, "freelancer_123");
@@ -222,6 +224,7 @@ describe("workflow dummy in-memory store", () => {
     });
 
     assert.equal(refunded?.contract.status, "refunded");
+    assert.equal(refunded?.contract.bidAmount, 250);
     assert.equal(refunded?.contract.refundTransactionHash, "0xrefund456");
     assert.equal(getDummyJob("job_456")?.status, "cancelled");
 
@@ -253,6 +256,7 @@ describe("workflow dummy in-memory store", () => {
     assert.equal(created.contract.status, "funded");
     assert.equal(created.contract.fundingTransactionHash, "0xfunded");
     assert.equal(created.contract.amount, 0.25);
+    assert.equal(created.contract.bidAmount, 0);
     assert.equal(created.contract.chainId, 11155111);
     assert.equal(created.contract.escrowAddress, "0x0000000000000000000000000000000000009999");
     assert.equal(created.contract.clientWalletAddress, "0x0000000000000000000000000000000000000abc");
