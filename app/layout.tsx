@@ -50,19 +50,17 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       style={{ colorScheme: initialTheme }}
     >
-      <head>
+      <body className="min-h-full flex flex-col">
+        <AppThemeProvider initialTheme={initialTheme}>
+          <AppNavbar />
+          {children}
+        </AppThemeProvider>
         <Script
           id="app-theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: getAppThemeInitScript() }}
           suppressHydrationWarning
         />
-      </head>
-      <body className="min-h-full flex flex-col">
-        <AppThemeProvider initialTheme={initialTheme}>
-          <AppNavbar />
-          {children}
-        </AppThemeProvider>
       </body>
     </html>
   );

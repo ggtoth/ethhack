@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { BidModeSelector } from "@/components/bid-mode-selector";
+import { JobTopics } from "@/components/job-topics";
+
 const requirements = ["Responsive landing page", "Deployed preview", "Source link"];
 
 export default function JobDetailPage() {
@@ -34,9 +37,13 @@ export default function JobDetailPage() {
             ))}
           </div>
 
+          <JobTopics />
+
+          <BidModeSelector />
+
           <Link
             className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] sm:w-auto"
-            href="/submit-work"
+            href="/profile"
           >
             Accept job
           </Link>

@@ -1,15 +1,62 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 const ETH_USD_RATE = 3500;
+const SEPOLIA_CHAIN_ID = "0xaa36a7";
+const SEPOLIA_PARAMS = {
+  chainId: SEPOLIA_CHAIN_ID,
+  chainName: "Sepolia",
+  nativeCurrency: {
+    name: "Sepolia ETH",
+    symbol: "ETH",
+    decimals: 18,
+  },
+  rpcUrls: ["https://rpc.sepolia.org"],
+  blockExplorerUrls: ["https://sepolia.etherscan.io"],
+};
+const escrowAddress = "0x1111111111111111111111111111111111111111";
+const testEthValueWei = BigInt("10000000000000");
+const testEthValueHex = `0x${testEthValueWei.toString(16)}`;
+const gasEstimate = "< 0.0001 SepoliaETH";
+
+type EthereumProvider = {
+  request: <T = unknown>(args: { method: string; params?: unknown[] }) => Promise<T>;
+};
+
+async function ensureSepolia(provider: EthereumProvider) {
+  const activeChainId = await provider.request<string>({ method: "eth_chainId" });
+
+  if (activeChainId === SEPOLIA_CHAIN_ID) return;
+
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    });
+  } catch (switchError) {
+    const code = typeof switchError === "object" && switchError && "code" in switchError
+      ? Number((switchError as { code: unknown }).code)
+      : 0;
+
+    if (code !== 4902) throw switchError;
+
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [SEPOLIA_PARAMS],
+    });
+  }
+}
 
 export function CreateJobForm() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [budgetUsd, setBudgetUsd] = useState("");
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"idle" | "confirming" | "checking" | "funded">("idle");
+  const [error, setError] = useState("");
   const budgetDisplay = budgetUsd.trim() ? Number(budgetUsd).toLocaleString("en-US") : "0";
 
   const budgetEth = useMemo(() => {
@@ -25,6 +72,49 @@ export function CreateJobForm() {
   const ready = title.trim() && details.trim() && budgetUsd.trim();
   const inputClass =
     "w-full rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-[14px] font-black text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] placeholder:opacity-60 focus:border-[var(--text-primary)]";
+
+  async function createAndFund() {
+    setError("");
+    const provider = (window as Window & { ethereum?: EthereumProvider }).ethereum;
+
+    if (!provider) {
+      setError("MetaMask is not installed.");
+      return;
+    }
+
+    setPaymentStatus("confirming");
+
+    try {
+      const accounts = await provider.request<string[]>({ method: "eth_requestAccounts" });
+      const from = accounts[0];
+
+      if (!from) {
+        throw new Error("No wallet account selected.");
+      }
+
+      await ensureSepolia(provider);
+
+      await provider.request<string>({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from,
+            to: escrowAddress,
+            value: testEthValueHex,
+          },
+        ],
+      });
+
+      setPaymentStatus("checking");
+      window.setTimeout(() => {
+        setPaymentStatus("funded");
+        window.setTimeout(() => router.push("/jobs/landing-page-implementation"), 1300);
+      }, 1600);
+    } catch {
+      setPaymentStatus("idle");
+      setError("Payment was rejected or failed.");
+    }
+  }
 
   return (
     <div className="col-span-full rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
@@ -125,17 +215,48 @@ export function CreateJobForm() {
                 ${budgetDisplay} USDT
               </p>
               <p>{budgetEth} ETH estimate</p>
+              <p>Network fee: {gasEstimate}</p>
             </div>
           </div>
 
-          <Link
-            className={`inline-flex h-11 items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] ${
-              ready ? "" : "pointer-events-none opacity-45"
-            }`}
-            href="/fund-escrow"
+          {error && (
+            <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[12px] font-black text-[var(--text-primary)]">
+              {error}
+            </p>
+          )}
+
+          {paymentStatus === "checking" && (
+            <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--text-primary)]" />
+              <span className="text-[12px] font-black text-[var(--text-primary)]">
+                Checking payment...
+              </span>
+            </div>
+          )}
+
+          {paymentStatus === "funded" && (
+            <div className="rounded-[12px] border border-[var(--border-strong)] bg-[var(--success-bg)] p-3">
+              <p className="text-[12px] font-black uppercase text-[var(--success)]">Funded</p>
+              <p className="mt-2 text-[13px] font-black text-[var(--text-primary)]">
+                Opening funded job...
+              </p>
+            </div>
+          )}
+
+          <button
+            className="inline-flex h-11 items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] disabled:opacity-45"
+            disabled={!ready || paymentStatus === "confirming" || paymentStatus === "checking" || paymentStatus === "funded"}
+            type="button"
+            onClick={createAndFund}
           >
-            Create + fund
-          </Link>
+            {paymentStatus === "confirming"
+              ? "Confirm in MetaMask..."
+              : paymentStatus === "checking"
+                ? "Checking..."
+                : paymentStatus === "funded"
+                  ? "Funded"
+                  : "Create + fund"}
+          </button>
         </aside>
       </section>
     </div>

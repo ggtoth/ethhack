@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const SEPOLIA_CHAIN_ID = "0xaa36a7";
@@ -46,25 +47,29 @@ function formatEth(hexWei: string) {
 }
 
 export function WalletConnectCard() {
+  const router = useRouter();
   const [account, setAccount] = useState("");
   const [chainId, setChainId] = useState("");
   const [balance, setBalance] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<"connect" | "network" | "">("");
+  const [redirecting, setRedirecting] = useState(false);
+  const [hasMetaMask, setHasMetaMask] = useState<boolean | null>(null);
 
-  const hasMetaMask = typeof window !== "undefined" && Boolean(window.ethereum?.isMetaMask);
   const connected = Boolean(account);
   const onSepolia = chainId === SEPOLIA_CHAIN_ID;
 
   const status = useMemo(() => {
+    if (redirecting) return "Connected";
+    if (hasMetaMask === null) return "Checking wallet";
     if (!hasMetaMask) return "MetaMask missing";
     if (pendingAction === "connect") return "Confirm in MetaMask";
     if (pendingAction === "network") return "Confirm network";
     if (!connected) return "Not connected";
     if (!onSepolia) return "Wrong network";
     return "Connected";
-  }, [connected, hasMetaMask, onSepolia, pendingAction]);
+  }, [connected, hasMetaMask, onSepolia, pendingAction, redirecting]);
 
   const readWallet = useCallback(async () => {
     if (!window.ethereum) return;
@@ -124,19 +129,22 @@ export function WalletConnectCard() {
   }, []);
 
   useEffect(() => {
-    if (!window.ethereum) return;
+    const provider = window.ethereum;
+    setHasMetaMask(Boolean(provider?.isMetaMask));
+
+    if (!provider) return;
 
     void readWallet();
 
     const handleAccountsChanged = () => void readWallet();
     const handleChainChanged = () => void readWallet();
 
-    window.ethereum.on?.("accountsChanged", handleAccountsChanged);
-    window.ethereum.on?.("chainChanged", handleChainChanged);
+    provider.on?.("accountsChanged", handleAccountsChanged);
+    provider.on?.("chainChanged", handleChainChanged);
 
     return () => {
-      window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
-      window.ethereum?.removeListener?.("chainChanged", handleChainChanged);
+      provider.removeListener?.("accountsChanged", handleAccountsChanged);
+      provider.removeListener?.("chainChanged", handleChainChanged);
     };
   }, [readWallet]);
 
@@ -154,6 +162,8 @@ export function WalletConnectCard() {
       await window.ethereum.request<string[]>({ method: "eth_requestAccounts" });
       await ensureSepolia();
       await readWallet();
+      setRedirecting(true);
+      window.setTimeout(() => router.push("/post-job"), 900);
     } catch {
       setError("Connection rejected.");
     } finally {
@@ -203,16 +213,21 @@ export function WalletConnectCard() {
         </div>
       )}
 
-      {connected && onSepolia && !pendingAction && (
+      {(connected && onSepolia && !pendingAction) || redirecting ? (
         <div className="mt-5 rounded-[14px] border border-[var(--border-strong)] bg-[var(--success-bg)] px-4 py-3">
           <p className="text-[12px] font-black uppercase text-[var(--success)]">
             Wallet connected
           </p>
           <p className="mt-2 break-all text-[14px] font-black text-[var(--text-primary)]">
-            {shortAddress(account)} on Sepolia
+            {account ? shortAddress(account) : "Connected"} on Sepolia
           </p>
+          {redirecting && (
+            <p className="mt-2 text-[12px] font-black text-[var(--success)]">
+              Opening create job...
+            </p>
+          )}
         </div>
-      )}
+      ) : null}
 
       <div className="mt-6 grid gap-3 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 text-[13px]">
         <div className="flex items-center justify-between gap-4">
@@ -272,7 +287,7 @@ export function WalletConnectCard() {
           </button>
         )}
 
-        {connected && onSepolia && (
+        {connected && onSepolia && !redirecting && (
           <Link
             className="inline-flex h-11 items-center justify-center rounded-[10px] bg-[var(--button)] px-5 text-[13px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)]"
             href="/post-job"

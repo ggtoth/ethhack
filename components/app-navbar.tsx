@@ -13,6 +13,7 @@ const navItems = [
   { href: "/browse-jobs", label: "Jobs" },
   { href: "/submit-work", label: "Proof" },
   { href: "/ai-review", label: "Review" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export function AppNavbar() {
