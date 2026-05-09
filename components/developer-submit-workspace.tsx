@@ -126,6 +126,13 @@ export function DeveloperSubmitWorkspace() {
       setReview(reviewPayload);
       window.localStorage.setItem("smartjobs:last-ai-review", JSON.stringify(reviewPayload));
       window.localStorage.setItem("smartjobs:last-ai-review-status", "ready");
+
+      const swarmField = (reviewPayload as Record<string, unknown>).swarm;
+
+      if (swarmField && typeof swarmField === "object") {
+        window.localStorage.setItem("smartjobs:last-swarm-proof", JSON.stringify(swarmField));
+      }
+
       window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
       setMessage("AI review is ready for the freelancer and client.");
     } finally {

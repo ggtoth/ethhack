@@ -17,6 +17,7 @@
     "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/run-tests.ps1"
   },
   "dependencies": {
+    "@ethersphere/bee-js": "^12.1.0",
     "next": "16.2.6",
     "openai": "^4.104.0",
     "react": "19.2.4",
@@ -24,15 +25,15 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.5",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
-    "tailwindcss": "^4",
-    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.5",
     "hardhat": "^3.4.5",
+    "tailwindcss": "^4",
     "typescript": "^5",
     "viem": "^2.48.11"
   }

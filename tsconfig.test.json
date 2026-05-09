@@ -12,7 +12,8 @@
   "include": [
     "app/**/route.ts",
     "lib/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:ducttapeevents.notion.site)",
+      "WebSearch",
+      "WebFetch(domain:ethprague2026.devfolio.co)",
+      "Bash(npm install *)",
+      "Bash(node -e \"const b = require\\('@ethersphere/bee-js'\\); console.log\\(Object.keys\\(b\\).filter\\(k => k.toLowerCase\\(\\).includes\\('signer'\\) || k.toLowerCase\\(\\).includes\\('feed'\\) || k.toLowerCase\\(\\).includes\\('stamp'\\) || k.toLowerCase\\(\\).includes\\('null'\\) || k.toLowerCase\\(\\).includes\\('private'\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"const b = require\\('@ethersphere/bee-js'\\); const bee = new b.Bee\\('https://bzz.limo'\\); console.log\\(Object.getOwnPropertyNames\\(Object.getPrototypeOf\\(bee\\)\\).filter\\(k => k.includes\\('eed'\\) || k.includes\\('opic'\\) || k.includes\\('ign'\\) || k.includes\\('pload'\\) || k.includes\\('ownload'\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const bee = require\\('@ethersphere/bee-js'\\); const b = new bee.Bee\\('https://bzz.limo'\\); console.log\\(Object.getOwnPropertyNames\\(Object.getPrototypeOf\\(b\\)\\).filter\\(m => m.includes\\('anifest'\\) || m.includes\\('ollection'\\) || m.includes\\('irectory'\\) || m.includes\\('iles'\\) || m.includes\\('bzz'\\) || m.includes\\('File'\\)\\)\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(python -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('scripts',{}\\), indent=2\\)\\); print\\('devDeps:', list\\(p.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(npm test *)"
+    ]
+  }
+}

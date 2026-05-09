@@ -13,6 +13,7 @@ import {
   type JobStatus,
   type StoredFile,
 } from "@/lib/workflow/domain-schema";
+import type { SwarmKvEntry } from "@/lib/swarm/types";
 import { getConfiguredEscrowAddress } from "@/lib/contracts/onchain-escrow-actions";
 import { SEPOLIA_CHAIN_ID_DECIMAL } from "@/lib/wallet/ethereum";
 
@@ -32,6 +33,7 @@ export class DummyWorkflowConflictError extends Error {
 type DummyStore = {
   jobs: Map<string, DummyJob>;
   contracts: Map<string, DummyEscrowContract>;
+  swarmIndex: Map<string, SwarmKvEntry>;
   nextJobNumber: number;
 };
 
@@ -260,7 +262,20 @@ export function resetDummyStoreForTests() {
 
   store.jobs = nextStore.jobs;
   store.contracts = nextStore.contracts;
+  store.swarmIndex = nextStore.swarmIndex;
   store.nextJobNumber = nextStore.nextJobNumber;
+}
+
+export function getSwarmKvEntry(key: string): SwarmKvEntry | null {
+  return store.swarmIndex.get(key) ?? null;
+}
+
+export function setSwarmKvEntry(key: string, entry: SwarmKvEntry): void {
+  store.swarmIndex.set(key, entry);
+}
+
+export function listSwarmKvEntries(): SwarmKvEntry[] {
+  return Array.from(store.swarmIndex.values());
 }
 
 export function listDummyJobs() {
@@ -772,6 +787,7 @@ function createSeededStore(): DummyStore {
         cloneRecord(parseContract(contract)),
       ]),
     ),
+    swarmIndex: new Map(),
     nextJobNumber: 1,
   };
 }

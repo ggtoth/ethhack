@@ -60,6 +60,12 @@ export const AiReviewSchema = z.object({
   issues: z.array(z.string()),
 });
 
+export const SwarmRefsSchema = z.object({
+  metadata: z.string().optional(),
+  deliverable: z.string().optional(),
+  review: z.string().optional(),
+});
+
 export const JobSchema = z.object({
   id: DomainIdSchema,
   contractId: DomainIdSchema,
@@ -77,6 +83,7 @@ export const JobSchema = z.object({
   finalFile: StoredFileSchema.nullable(),
   submissionNotes: z.string().trim().min(1).nullable(),
   aiReview: AiReviewSchema.nullable(),
+  swarmRefs: SwarmRefsSchema.optional(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 });
@@ -241,6 +248,7 @@ export type EscrowContractAction = z.infer<typeof EscrowContractActionSchema>;
 export type OnChainEscrowAction = z.infer<typeof OnChainEscrowActionSchema>;
 export type StoredFile = z.infer<typeof StoredFileSchema>;
 export type AiReview = z.infer<typeof AiReviewSchema>;
+export type SwarmRefs = z.infer<typeof SwarmRefsSchema>;
 export type Job = z.infer<typeof JobSchema>;
 export type EscrowContract = z.infer<typeof EscrowContractSchema>;
 export type CreateJobInput = z.infer<typeof CreateJobInputSchema>;

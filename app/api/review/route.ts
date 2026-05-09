@@ -1,6 +1,8 @@
 import { runBatchReview } from "@/lib/review/service";
 import type { ReviewInputFile } from "@/lib/review/schema";
-import { getDummyJobWithContract } from "@/lib/workflow/dummy-endpoints";
+import { getDummyJobWithContract, updateDummyJob } from "@/lib/workflow/dummy-endpoints";
+import { createSwarmKVFromEnv, isSwarmKVConfigured } from "@/lib/swarm/swarm-kv-lib";
+import { swarmKvSet } from "@/lib/swarm/kv-store";
 
 export const runtime = "nodejs";
 
@@ -58,7 +60,68 @@ export async function POST(request: Request) {
       previewFiles: normalizedPreviews,
     });
 
-    return Response.json(result);
+    const kvPayload = {
+      jobId: job.id,
+      contractId: contract.id,
+      review: result,
+      storedAt: new Date().toISOString(),
+    };
+
+    let swarmRef: string | null = null;
+    let swarmUrl: string | null = null;
+    let swarmManifestRef: string | null = null;
+    let swarmManifestUrl: string | null = null;
+
+    if (isSwarmKVConfigured()) {
+      try {
+        const kv = createSwarmKVFromEnv();
+        const putResult = await kv.put(`job:${job.id}:review`, kvPayload);
+
+        swarmRef = putResult.dataReference;
+        swarmUrl = putResult.url;
+        swarmManifestRef = putResult.manifestReference;
+        swarmManifestUrl = putResult.manifestUrl;
+
+        const currentRefs = job.swarmRefs ?? {};
+
+        updateDummyJob(job.id, {
+          swarmRefs: { ...currentRefs, review: swarmRef, reviewManifest: swarmManifestRef },
+        });
+      } catch {
+        // Feeds failed — fall back to plain bytes
+        const entry = await swarmKvSet(`job:${job.id}:review`, kvPayload).catch(() => null);
+
+        if (entry) {
+          swarmRef = entry.reference;
+          swarmUrl = entry.url;
+          updateDummyJob(job.id, {
+            swarmRefs: { ...(job.swarmRefs ?? {}), review: swarmRef },
+          });
+        }
+      }
+    } else {
+      const entry = await swarmKvSet(`job:${job.id}:review`, kvPayload).catch(() => null);
+
+      if (entry) {
+        swarmRef = entry.reference;
+        swarmUrl = entry.url;
+        updateDummyJob(job.id, {
+          swarmRefs: { ...(job.swarmRefs ?? {}), review: swarmRef },
+        });
+      }
+    }
+
+    return Response.json({
+      ...result,
+      swarm: swarmRef
+        ? {
+            reference: swarmRef,
+            url: swarmUrl,
+            manifestReference: swarmManifestRef,
+            manifestUrl: swarmManifestUrl,
+          }
+        : null,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "The review request failed.";

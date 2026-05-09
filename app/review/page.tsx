@@ -10,10 +10,18 @@ import type { ReviewResult } from "@/lib/review/schema";
 
 const reviewedJob = jobs.find((job) => job.id === "landing-page-implementation") ?? jobs[0];
 
+type SwarmProof = {
+  reference: string;
+  url: string;
+  manifestReference?: string;
+  manifestUrl?: string;
+};
+
 export default function ReviewPage() {
   const searchParams = useSearchParams();
   const variant = searchParams.get("case") ?? undefined;
   const [liveReview, setLiveReview] = useState<ReviewResult | null>(null);
+  const [swarmProof, setSwarmProof] = useState<SwarmProof | null>(null);
   const displayInput = liveReview ? reviewResultToDisplayInput(liveReview) : getDemoInput(variant);
   const display = getReviewDisplay(displayInput);
   const summary = liveReview?.user_visible.summary ?? display.summary;
@@ -33,18 +41,30 @@ export default function ReviewPage() {
   useEffect(() => {
     const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
 
-    if (!storedReview) {
-      return;
+    if (storedReview) {
+      try {
+        const parsed = JSON.parse(storedReview) as unknown;
+
+        if (isReviewResult(parsed)) {
+          setLiveReview(parsed);
+        }
+      } catch {
+        setLiveReview(null);
+      }
     }
 
-    try {
-      const parsed = JSON.parse(storedReview) as unknown;
+    const storedSwarm = window.localStorage.getItem("smartjobs:last-swarm-proof");
 
-      if (isReviewResult(parsed)) {
-        setLiveReview(parsed);
+    if (storedSwarm) {
+      try {
+        const parsed = JSON.parse(storedSwarm) as unknown;
+
+        if (isSwarmProof(parsed)) {
+          setSwarmProof(parsed);
+        }
+      } catch {
+        setSwarmProof(null);
       }
-    } catch {
-      setLiveReview(null);
     }
   }, []);
 
@@ -159,6 +179,73 @@ export default function ReviewPage() {
               Approval releases the locked escrow and marks the freelancer wallet
               as paid in the demo.
             </p>
+          )}
+
+          {swarmProof && (
+            <div className="mx-auto mt-6 w-full max-w-[460px] rounded-[12px] border border-[color-mix(in_srgb,#f7931a_20%,var(--border))] bg-[color-mix(in_srgb,#f7931a_5%,var(--surface))] px-4 py-3 text-left">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#f7931a] text-[9px] font-black text-white">
+                  ✦
+                </span>
+                <p className="text-[11px] font-black uppercase text-[#f7931a]">
+                  Stored on Swarm
+                </p>
+              </div>
+              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                Content reference (immutable)
+              </p>
+              <p className="mt-1 break-all font-mono text-[10px] leading-4 text-[var(--text-secondary)]">
+                {swarmProof.reference}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <a
+                  className="text-[11px] font-bold text-[#f7931a] underline underline-offset-2 hover:opacity-75"
+                  href={swarmProof.url}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Open on gateway
+                </a>
+                <span className="text-[var(--text-muted)]">·</span>
+                <a
+                  className="text-[11px] font-bold text-[#f7931a] underline underline-offset-2 hover:opacity-75"
+                  href={`/api/swarm/verify/${swarmProof.reference}`}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Verify integrity
+                </a>
+              </div>
+              {swarmProof.manifestReference && (
+                <>
+                  <p className="mt-3 text-[10px] text-[var(--text-muted)]">
+                    Feed manifest (mutable — always resolves to latest)
+                  </p>
+                  <p className="mt-1 break-all font-mono text-[10px] leading-4 text-[var(--text-secondary)]">
+                    {swarmProof.manifestReference}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <a
+                      className="text-[11px] font-bold text-[#f7931a] underline underline-offset-2 hover:opacity-75"
+                      href={swarmProof.manifestUrl}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Open manifest
+                    </a>
+                    <span className="text-[var(--text-muted)]">·</span>
+                    <a
+                      className="text-[11px] font-bold text-[#f7931a] underline underline-offset-2 hover:opacity-75"
+                      href={`/api/swarm/verify/${swarmProof.manifestReference}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Verify manifest
+                    </a>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </section>
@@ -571,6 +658,12 @@ function isReviewResult(value: unknown): value is ReviewResult {
     "comparison_notes" in value &&
     "user_visible" in value
   );
+}
+
+function isSwarmProof(value: unknown): value is SwarmProof {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.reference === "string" && typeof v.url === "string";
 }
 
 function Confetti() {
