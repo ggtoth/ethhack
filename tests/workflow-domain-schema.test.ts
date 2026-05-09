@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  ConfirmOnChainEscrowActionInputSchema,
+  ConfirmOnChainEscrowFundingInputSchema,
   CreateJobInputSchema,
+  EscrowContractActionInputSchema,
   EscrowContractSchema,
   JobSchema,
+  PrepareOnChainEscrowActionInputSchema,
+  PrepareOnChainEscrowFundingInputSchema,
+  UpdateEscrowContractInputSchema,
   UpdateJobInputSchema,
 } from "../lib/workflow/domain-schema";
 
@@ -18,19 +24,21 @@ describe("workflow domain schemas", () => {
       budget: 42,
       deadline: "2026-06-01",
       requirements: "Use a schema.",
-      status: "open",
+      status: "disputed",
       createdBy: "user_123",
       assignedTo: null,
       sourceFiles: [],
+      submittedSourceFiles: [],
       previewFile: null,
       finalFile: null,
+      submissionNotes: null,
       aiReview: null,
       createdAt: "2026-05-08T00:00:00.000Z",
       updatedAt: "2026-05-08T00:00:00.000Z",
     });
 
     assert.equal(parsed.id, "job_schema");
-    assert.equal(parsed.status, "open");
+    assert.equal(parsed.status, "disputed");
   });
 
   test("validates escrow contract records", () => {
@@ -39,27 +47,46 @@ describe("workflow domain schemas", () => {
       jobId: "job_schema",
       clientId: "user_123",
       freelancerId: null,
+      clientWalletAddress: "0x0000000000000000000000000000000000000001",
+      freelancerWalletAddress: null,
       amount: 42,
+      bidAmount: 21,
       currency: "ETH",
       status: "funded",
       fundedAt: "2026-05-08T00:00:00.000Z",
+      lockedAt: null,
+      releaseRequestedAt: null,
       releasedAt: null,
+      disputedAt: null,
       cancelledAt: null,
       transactionHash: "0xmock",
+      chainId: 1,
+      escrowAddress: "0x0000000000000000000000000000000000000001",
+      fundingTransactionHash: "0xmockfunded",
+      lockTransactionHash: null,
+      releaseRequestTransactionHash: null,
+      releaseTransactionHash: null,
+      refundTransactionHash: null,
+      disputeTransactionHash: null,
+      cancelTransactionHash: null,
+      disputeReason: null,
       createdAt: "2026-05-08T00:00:00.000Z",
       updatedAt: "2026-05-08T00:00:00.000Z",
     });
 
     assert.equal(parsed.jobId, "job_schema");
     assert.equal(parsed.status, "funded");
+    assert.equal(parsed.bidAmount, 21);
+    assert.equal(parsed.chainId, 1);
   });
 
-  test("accepts reasonable create and update inputs", () => {
+  test("accepts reasonable create, update, and on-chain inputs", () => {
     assert.equal(
       CreateJobInputSchema.parse({
         title: "Create input",
         budget: 3,
-        escrow: { currency: "ETH" },
+        submittedSourceFiles: [],
+        escrow: { currency: "ETH", bidAmount: 1.5 },
       }).title,
       "Create input",
     );
@@ -67,8 +94,55 @@ describe("workflow domain schemas", () => {
       UpdateJobInputSchema.parse({
         status: "submitted",
         assignedTo: "freelancer_123",
+        submissionNotes: "Ready for review.",
       }).status,
       "submitted",
+    );
+    assert.equal(
+      UpdateEscrowContractInputSchema.parse({
+        bidAmount: 0.5,
+        disputeReason: "The submitted work does not match the brief.",
+      }).disputeReason,
+      "The submitted work does not match the brief.",
+    );
+    assert.equal(
+      EscrowContractActionInputSchema.parse({
+        action: "release",
+        transactionHash: "0xrelease",
+      }).action,
+      "release",
+    );
+    assert.equal(
+      PrepareOnChainEscrowActionInputSchema.parse({
+        action: "lock",
+        freelancerWalletAddress: "0x0000000000000000000000000000000000000002",
+      }).action,
+      "lock",
+    );
+    assert.equal(
+      ConfirmOnChainEscrowActionInputSchema.parse({
+        action: "refund",
+        transactionHash: "0xrefund",
+      }).transactionHash,
+      "0xrefund",
+    );
+    assert.equal(
+      PrepareOnChainEscrowFundingInputSchema.parse({
+        amountEth: "0.25",
+      }).amountEth,
+      "0.25",
+    );
+    assert.equal(
+      ConfirmOnChainEscrowFundingInputSchema.parse({
+        id: "job_chain",
+        contractId: "contract_job_chain",
+        title: "Chain job",
+        description: "Created from funded escrow.",
+        budget: 875,
+        requirements: "Preserve tx metadata.",
+        transactionHash: "0xfunded",
+      }).transactionHash,
+      "0xfunded",
     );
   });
 
@@ -87,8 +161,10 @@ describe("workflow domain schemas", () => {
           createdBy: "user_123",
           assignedTo: null,
           sourceFiles: [],
+          submittedSourceFiles: [],
           previewFile: null,
           finalFile: null,
+          submissionNotes: null,
           aiReview: null,
           createdAt: "not-a-date",
           updatedAt: "2026-05-08T00:00:00.000Z",
@@ -106,7 +182,10 @@ describe("workflow domain schemas", () => {
           currency: "",
           status: "missing",
           fundedAt: null,
+          lockedAt: null,
+          releaseRequestedAt: null,
           releasedAt: null,
+          disputedAt: null,
           cancelledAt: null,
           transactionHash: null,
           createdAt: "2026-05-08T00:00:00.000Z",

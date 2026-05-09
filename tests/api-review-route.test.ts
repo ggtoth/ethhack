@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { beforeEach, describe, test } from "node:test";
 
-import { resetDummyStoreForTests } from "@/lib/workflow/dummy-endpoints";
+import { resetDummyStoreForTests, submitDummyJob } from "@/lib/workflow/dummy-endpoints";
 import type { ReviewInputFile, ReviewResult } from "../lib/review/schema";
 
 type RunBatchReviewArgs = {
   jobId?: string;
   contractId?: string;
   description: string;
+  submissionNotes?: string;
   sourceFiles: ReviewInputFile[];
   previewFiles: ReviewInputFile[];
 };
@@ -73,6 +74,27 @@ describe("review API route", () => {
   });
 
   test("loads authoritative job and contract details before review", async () => {
+    submitDummyJob("job_456", {
+      previewFile: {
+        id: "preview_submit",
+        url: "https://demo.app/landing",
+        filename: "landing",
+      },
+      finalFile: {
+        id: "final_submit",
+        url: "https://github.com/demo/source/archive.zip",
+        filename: "archive.zip",
+      },
+      submittedSourceFiles: [
+        {
+          id: "source_submit",
+          url: "https://github.com/demo/source/archive.zip",
+          filename: "archive.zip",
+        },
+      ],
+      submissionNotes: "Responsive page completed.",
+    });
+
     const formData = new FormData();
     formData.set("jobId", "job_456");
     formData.set("contractId", "contract_job_456");
@@ -95,8 +117,15 @@ describe("review API route", () => {
     assert.equal(mockReviewCalls.length, 1);
     assert.equal(mockReviewCalls[0].jobId, "job_456");
     assert.equal(mockReviewCalls[0].contractId, "contract_job_456");
-    assert.match(mockReviewCalls[0].description, /Build a landing page/);
-    assert.match(mockReviewCalls[0].description, /Create a responsive landing page/);
+    assert.equal(mockReviewCalls[0].submissionNotes, "Responsive page completed.");
+    assert.match(mockReviewCalls[0].description, /Job ID: job_456/);
+    assert.match(mockReviewCalls[0].description, /Contract ID: contract_job_456/);
+    assert.match(mockReviewCalls[0].description, /Current escrow state: release_requested/);
+    assert.match(mockReviewCalls[0].description, /Submitted source files: archive.zip/);
+    assert.match(mockReviewCalls[0].description, /Preview file: landing/);
+    assert.match(mockReviewCalls[0].description, /Final file: archive.zip/);
+    assert.match(mockReviewCalls[0].description, /Submission notes: Responsive page completed./);
+    assert.match(mockReviewCalls[0].description, /Dispute reason: None/);
     assert.equal(mockReviewCalls[0].sourceFiles.length, 1);
     assert.equal(mockReviewCalls[0].previewFiles.length, 1);
   });

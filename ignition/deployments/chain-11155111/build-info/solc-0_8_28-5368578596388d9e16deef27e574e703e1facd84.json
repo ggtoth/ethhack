@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-5368578596388d9e16deef27e574e703e1facd84",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.4.5"
+  },
+  "userSourceNameMap": {
+    "contracts/SmartJobsEscrow.sol": "project/contracts/SmartJobsEscrow.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/SmartJobsEscrow.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\n/// @title SmartJobsEscrow\n/// @notice ETH escrow for SmartJobs jobs with downward freelancer bidding.\n/// @dev The backend never holds funds. Clients fund this contract directly, and\n/// frontend wallets call lifecycle functions that the backend only records.\ncontract SmartJobsEscrow {\n    enum EscrowStatus {\n        None,\n        Funded,\n        Locked,\n        ReleaseRequested,\n        Released,\n        Refunded,\n        Disputed,\n        Cancelled\n    }\n\n    struct Escrow {\n        address payable client;\n        address payable freelancer;\n        uint256 amount;\n        uint256 bidAmount;\n        EscrowStatus status;\n        string jobId;\n        string disputeReason;\n        uint64 createdAt;\n        uint64 updatedAt;\n    }\n\n    mapping(bytes32 => Escrow) private escrows;\n\n    event EscrowCreated(\n        bytes32 indexed escrowId,\n        string jobId,\n        address indexed client,\n        uint256 amount\n    );\n    event EscrowLocked(\n        bytes32 indexed escrowId,\n        address indexed freelancer,\n        uint256 bidAmount\n    );\n    event ReleaseRequested(bytes32 indexed escrowId);\n    event EscrowReleased(\n        bytes32 indexed escrowId,\n        address indexed freelancer,\n        uint256 paidToFreelancer,\n        uint256 refundedToClient\n    );\n    event EscrowRefunded(bytes32 indexed escrowId, uint256 amount);\n    event EscrowDisputed(bytes32 indexed escrowId, string reason);\n    event EscrowCancelled(bytes32 indexed escrowId, uint256 amount);\n\n    error EscrowAlreadyExists(bytes32 escrowId);\n    error EscrowNotFound(bytes32 escrowId);\n    error InvalidStatus(EscrowStatus currentStatus);\n    error InvalidAmount();\n    error InvalidFreelancer();\n    error Unauthorized();\n    error TransferFailed();\n\n    modifier existingEscrow(bytes32 escrowId) {\n        if (escrows[escrowId].status == EscrowStatus.None) {\n            revert EscrowNotFound(escrowId);\n        }\n        _;\n    }\n\n    modifier onlyClient(bytes32 escrowId) {\n        if (msg.sender != escrows[escrowId].client) {\n            revert Unauthorized();\n        }\n        _;\n    }\n\n    modifier onlyFreelancer(bytes32 escrowId) {\n        if (msg.sender != escrows[escrowId].freelancer) {\n            revert Unauthorized();\n        }\n        _;\n    }\n\n    function createEscrow(\n        bytes32 escrowId,\n        string calldata jobId\n    ) external payable {\n        if (escrows[escrowId].status != EscrowStatus.None) {\n            revert EscrowAlreadyExists(escrowId);\n        }\n\n        if (msg.value == 0) {\n            revert InvalidAmount();\n        }\n\n        uint64 nowTimestamp = uint64(block.timestamp);\n\n        escrows[escrowId] = Escrow({\n            client: payable(msg.sender),\n            freelancer: payable(address(0)),\n            amount: msg.value,\n            bidAmount: 0,\n            status: EscrowStatus.Funded,\n            jobId: jobId,\n            disputeReason: \"\",\n            createdAt: nowTimestamp,\n            updatedAt: nowTimestamp\n        });\n\n        emit EscrowCreated(escrowId, jobId, msg.sender, msg.value);\n    }\n\n    function lockEscrow(\n        bytes32 escrowId,\n        address payable freelancer,\n        uint256 bidAmount\n    ) external existingEscrow(escrowId) onlyClient(escrowId) {\n        Escrow storage escrow = escrows[escrowId];\n\n        if (escrow.status != EscrowStatus.Funded) {\n            revert InvalidStatus(escrow.status);\n        }\n\n        if (freelancer == address(0) || freelancer == escrow.client) {\n            revert InvalidFreelancer();\n        }\n\n        if (bidAmount == 0 || bidAmount > escrow.amount) {\n            revert InvalidAmount();\n        }\n\n        escrow.freelancer = freelancer;\n        escrow.bidAmount = bidAmount;\n        escrow.status = EscrowStatus.Locked;\n        escrow.updatedAt = uint64(block.timestamp);\n\n        emit EscrowLocked(escrowId, freelancer, bidAmount);\n    }\n\n    function requestRelease(\n        bytes32 escrowId\n    ) external existingEscrow(escrowId) onlyFreelancer(escrowId) {\n        Escrow storage escrow = escrows[escrowId];\n\n        if (escrow.status != EscrowStatus.Locked) {\n            revert InvalidStatus(escrow.status);\n        }\n\n        escrow.status = EscrowStatus.ReleaseRequested;\n        escrow.updatedAt = uint64(block.timestamp);\n\n        emit ReleaseRequested(escrowId);\n    }\n\n    function release(\n        bytes32 escrowId\n    ) external existingEscrow(escrowId) onlyClient(escrowId) {\n        Escrow storage escrow = escrows[escrowId];\n\n        if (\n            escrow.status != EscrowStatus.Locked &&\n            escrow.status != EscrowStatus.ReleaseRequested\n        ) {\n            revert InvalidStatus(escrow.status);\n        }\n\n        uint256 freelancerPayment = escrow.bidAmount;\n        uint256 clientRefund = escrow.amount - freelancerPayment;\n        address payable freelancer = escrow.freelancer;\n        address payable client = escrow.client;\n\n        escrow.status = EscrowStatus.Released;\n        escrow.updatedAt = uint64(block.timestamp);\n\n        _sendEth(freelancer, freelancerPayment);\n\n        if (clientRefund > 0) {\n            _sendEth(client, clientRefund);\n        }\n\n        emit EscrowReleased(\n            escrowId,\n            freelancer,\n            freelancerPayment,\n            clientRefund\n        );\n    }\n\n    function refund(\n        bytes32 escrowId\n    ) external existingEscrow(escrowId) onlyClient(escrowId) {\n        Escrow storage escrow = escrows[escrowId];\n\n        if (\n            escrow.status != EscrowStatus.Funded &&\n            escrow.status != EscrowStatus.Locked &&\n            escrow.status != EscrowStatus.ReleaseRequested &&\n            escrow.status != EscrowStatus.Disputed\n        ) {\n            revert InvalidStatus(escrow.status);\n        }\n\n        uint256 refundAmount = escrow.amount;\n        address payable client = escrow.client;\n\n        escrow.status = EscrowStatus.Refunded;\n        escrow.updatedAt = uint64(block.timestamp);\n\n        _sendEth(client, refundAmount);\n\n        emit EscrowRefunded(escrowId, refundAmount);\n    }\n\n    function openDispute(\n        bytes32 escrowId,\n        string calldata reason\n    ) external existingEscrow(escrowId) {\n        Escrow storage escrow = escrows[escrowId];\n\n        if (msg.sender != escrow.client && msg.sender != escrow.freelancer) {\n            revert Unauthorized();\n        }\n\n        if (\n            escrow.status != EscrowStatus.Locked &&\n            escrow.status != EscrowStatus.ReleaseRequested\n        ) {\n            revert InvalidStatus(escrow.status);\n        }\n\n        escrow.status = EscrowStatus.Disputed;\n        escrow.disputeReason = reason;\n        escrow.updatedAt = uint64(block.timestamp);\n\n        emit EscrowDisputed(escrowId, reason);\n    }\n\n    function cancel(\n        bytes32 escrowId\n    ) external existingEscrow(escrowId) onlyClient(escrowId) {\n        Escrow storage escrow = escrows[escrowId];\n\n        if (escrow.status != EscrowStatus.Funded) {\n            revert InvalidStatus(escrow.status);\n        }\n\n        uint256 refundAmount = escrow.amount;\n        address payable client = escrow.client;\n\n        escrow.status = EscrowStatus.Cancelled;\n        escrow.updatedAt = uint64(block.timestamp);\n\n        _sendEth(client, refundAmount);\n\n        emit EscrowCancelled(escrowId, refundAmount);\n    }\n\n    function getEscrow(\n        bytes32 escrowId\n    ) external view existingEscrow(escrowId) returns (Escrow memory) {\n        return escrows[escrowId];\n    }\n\n    function _sendEth(address payable recipient, uint256 amount) private {\n        (bool success, ) = recipient.call{value: amount}(\"\");\n\n        if (!success) {\n            revert TransferFailed();\n        }\n    }\n}\n"
+      }
+    }
+  }
+}
