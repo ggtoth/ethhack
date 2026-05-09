@@ -50,6 +50,39 @@ export const StoredFileSchema = z.object({
   id: DomainIdSchema,
   url: z.string().trim().min(1),
   filename: z.string().trim().min(1),
+  storageKind: z
+    .enum(["generic_url", "swarm_immutable", "swarm_feed"])
+    .optional(),
+  verification: z
+    .object({
+      status: z.enum(["verified", "failed"]),
+      kind: z.enum(["immutable", "feed_payload", "feed_reference"]),
+      requestedUrl: z.string().trim().min(1),
+      gatewayUrl: z.string().trim().min(1),
+      resolvedReference: z.string().trim().min(1).nullable(),
+      verifiedAt: IsoDateTimeSchema,
+      feed: z
+        .object({
+          owner: z.string().trim().min(1),
+          topic: z.string().trim().min(1),
+          index: z.string().trim().min(1).nullable(),
+        })
+        .nullable(),
+      details: z.object({
+        rootChunkReference: z.string().trim().min(1).optional(),
+        manifestPath: z.string().trim().min(1).nullable().optional(),
+        chunkCount: z.number().int().nonnegative().nullable().optional(),
+        notes: z.array(z.string()).optional(),
+      }),
+      error: z
+        .object({
+          code: z.string().trim().min(1),
+          message: z.string().trim().min(1),
+        })
+        .nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const AiReviewSchema = z.object({

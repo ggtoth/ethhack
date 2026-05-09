@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "swarm-verified-fetch": ["./packages/swarm-verified-fetch/src/index.ts"],
+      "swarm-verified-fetch/*": ["./packages/swarm-verified-fetch/src/*"]
     }
   },
   "include": [

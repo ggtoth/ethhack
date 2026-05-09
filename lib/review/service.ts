@@ -155,7 +155,6 @@ function toResponseInput(
   return {
     type: "input_file",
     file_id: file.reviewedFile.file_id,
-    filename: file.reviewedFile.file_name,
   };
 }
 

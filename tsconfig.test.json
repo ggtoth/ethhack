@@ -12,6 +12,7 @@
   "include": [
     "app/**/route.ts",
     "lib/**/*.ts",
+    "packages/**/*.ts",
     "tests/**/*.ts"
   ],
   "exclude": [

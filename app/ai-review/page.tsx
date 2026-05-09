@@ -42,8 +42,16 @@ export default async function AIReviewPage({ searchParams }: AIReviewPageProps) 
               value={record.job.previewFile?.url ?? "No preview file submitted."}
             />
             <LedgerRow
+              label="Preview verification"
+              value={formatVerification(record.job.previewFile)}
+            />
+            <LedgerRow
               label="Final file"
               value={record.job.finalFile?.url ?? "No final file submitted."}
+            />
+            <LedgerRow
+              label="Final verification"
+              value={formatVerification(record.job.finalFile)}
             />
             <LedgerRow
               label="Submitted source files"
@@ -52,6 +60,10 @@ export default async function AIReviewPage({ searchParams }: AIReviewPageProps) 
                   ? record.job.submittedSourceFiles.map((file) => file.url).join(", ")
                   : "No source package submitted."
               }
+            />
+            <LedgerRow
+              label="Source verification"
+              value={formatVerification(record.job.submittedSourceFiles[0] ?? null)}
             />
             <LedgerRow
               label="Submission notes"
@@ -111,4 +123,34 @@ function getFirstQueryValue(value?: string | string[]) {
   const trimmed = firstValue?.trim();
 
   return trimmed ? trimmed : null;
+}
+
+function formatVerification(
+  file:
+    | {
+        storageKind?: string;
+        verification?: {
+          status: string;
+          kind: string;
+          resolvedReference: string | null;
+        } | null;
+      }
+    | null
+    | undefined,
+) {
+  if (!file) {
+    return "No file";
+  }
+
+  if (!file.verification) {
+    return file.storageKind === "generic_url" || file.storageKind === undefined
+      ? "Generic URL"
+      : "Not verified";
+  }
+
+  const reference = file.verification.resolvedReference
+    ? ` (${file.verification.resolvedReference.slice(0, 12)}...)`
+    : "";
+
+  return `${file.verification.status} ${file.verification.kind.replaceAll("_", " ")}${reference}`;
 }

@@ -73,10 +73,22 @@ export default function DebugLedgerPage() {
                   <Metric label="Client" value={job.createdBy} />
                   <Metric label="Freelancer" value={job.assignedTo ?? "unassigned"} />
                   <Metric label="Preview" value={job.previewFile?.filename ?? "none"} />
+                  <Metric
+                    label="Preview verify"
+                    value={formatVerificationStatus(job.previewFile)}
+                  />
                   <Metric label="Final" value={job.finalFile?.filename ?? "none"} />
+                  <Metric
+                    label="Final verify"
+                    value={formatVerificationStatus(job.finalFile)}
+                  />
                   <Metric
                     label="Submitted sources"
                     value={String(job.submittedSourceFiles.length)}
+                  />
+                  <Metric
+                    label="Source verify"
+                    value={formatVerificationStatus(job.submittedSourceFiles[0] ?? null)}
                   />
                   <Metric
                     label="AI review"
@@ -91,6 +103,24 @@ export default function DebugLedgerPage() {
                     {job.submissionNotes}
                   </p>
                 )}
+
+                <div className="mt-4 grid gap-3">
+                  <FileReferenceCard
+                    title="Preview file"
+                    file={job.previewFile}
+                  />
+                  <FileReferenceCard
+                    title="Final file"
+                    file={job.finalFile}
+                  />
+                  {job.submittedSourceFiles.map((file, index) => (
+                    <FileReferenceCard
+                      key={file.id}
+                      title={`Submitted source ${index + 1}`}
+                      file={file}
+                    />
+                  ))}
+                </div>
               </article>
             );
           })}
@@ -262,4 +292,149 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatVerificationStatus(
+  file:
+    | {
+        storageKind?: string;
+        verification?: {
+          status: string;
+          kind: string;
+        } | null;
+      }
+    | null
+    | undefined,
+) {
+  if (!file) {
+    return "none";
+  }
+
+  if (!file.verification) {
+    return file.storageKind === "generic_url" || file.storageKind === undefined
+      ? "generic"
+      : "pending";
+  }
+
+  return `${file.verification.status} ${file.verification.kind.replaceAll("_", " ")}`;
+}
+
+function FileReferenceCard({
+  file,
+  title,
+}: {
+  file:
+    | {
+        id: string;
+        filename: string;
+        url: string;
+        storageKind?: string;
+        verification?: {
+          status: string;
+          kind: string;
+          requestedUrl: string;
+          gatewayUrl: string;
+          resolvedReference: string | null;
+          verifiedAt: string;
+          details: {
+            rootChunkReference?: string;
+            manifestPath?: string | null;
+            chunkCount?: number | null;
+            notes?: string[];
+          };
+          error?: {
+            code: string;
+            message: string;
+          } | null;
+        } | null;
+      }
+    | null
+    | undefined;
+  title: string;
+}) {
+  if (!file) {
+    return null;
+  }
+
+  const verification = file.verification;
+
+  return (
+    <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase text-[var(--text-muted)]">
+            {title}
+          </p>
+          <p className="mt-1 text-[14px] font-bold text-[var(--text-primary)]">
+            {file.filename}
+          </p>
+        </div>
+        <StatusPill value={formatVerificationStatus(file)} />
+      </div>
+
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        <ReferenceField label="File ID" value={file.id} />
+        <ReferenceField label="Storage kind" value={file.storageKind ?? "generic_url"} />
+        <ReferenceField label="Stored URL" value={file.url} />
+        <ReferenceField
+          label="Requested Swarm URL"
+          value={verification?.requestedUrl ?? "none"}
+        />
+        <ReferenceField
+          label="Resolved reference"
+          value={verification?.resolvedReference ?? "none"}
+        />
+        <ReferenceField
+          label="Root chunk reference"
+          value={verification?.details.rootChunkReference ?? "none"}
+        />
+        <ReferenceField
+          label="Gateway"
+          value={verification?.gatewayUrl ?? "none"}
+        />
+        <ReferenceField
+          label="Verified at"
+          value={verification ? formatDate(verification.verifiedAt) : "none"}
+        />
+        <ReferenceField
+          label="Chunk count"
+          value={
+            verification?.details.chunkCount === undefined ||
+            verification?.details.chunkCount === null
+              ? "none"
+              : String(verification.details.chunkCount)
+          }
+        />
+        <ReferenceField
+          label="Manifest path"
+          value={verification?.details.manifestPath ?? "none"}
+        />
+      </dl>
+
+      {verification?.details.notes && verification.details.notes.length > 0 && (
+        <p className="mt-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+          {verification.details.notes.join(" ")}
+        </p>
+      )}
+
+      {verification?.error && (
+        <p className="mt-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+          {verification.error.code}: {verification.error.message}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ReferenceField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-bold uppercase text-[var(--text-muted)]">
+        {label}
+      </dt>
+      <dd className="mt-1 break-all text-[13px] font-bold text-[var(--text-primary)]">
+        {value}
+      </dd>
+    </div>
+  );
 }

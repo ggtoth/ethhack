@@ -29,6 +29,18 @@ export async function prepareReviewFile(
     notes.push(`Image resolution: ${resolution}`);
   }
 
+  if (inputFile.swarm) {
+    notes.push(`Swarm requested reference: ${inputFile.swarm.requestedReference}`);
+    notes.push(
+      `Swarm resolved reference: ${inputFile.swarm.resolvedReference ?? "unknown"}`,
+    );
+    notes.push(
+      `Swarm reference matched request: ${inputFile.swarm.referenceMatchesRequest}`,
+    );
+    notes.push(`Swarm verified at: ${inputFile.swarm.verifiedAt}`);
+    notes.push(`Swarm gateway: ${inputFile.swarm.gatewayUrl}`);
+  }
+
   return {
     ...inputFile,
     buffer,

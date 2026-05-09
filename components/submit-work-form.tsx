@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { getAddress } from "viem";
 
 import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
+import type { VerificationResult } from "swarm-verified-fetch";
 
 type JobRecord = {
   job: {
@@ -50,11 +51,30 @@ export function SubmitWorkForm({ record }: { record: JobRecord }) {
 
     setState({ status: "submitting" });
 
-    const previewFile = makeStoredFile(record.job.id, "preview", previewUrl);
-    const finalFile = makeStoredFile(record.job.id, "final", sourceUrl);
-    const submittedSourceFile = makeStoredFile(record.job.id, "submitted-source", sourceUrl);
-
     try {
+      const [previewVerification, sourceVerification] = await Promise.all([
+        verifySwarmUrl(previewUrl),
+        verifySwarmUrl(sourceUrl),
+      ]);
+      const previewFile = makeStoredFile(
+        record.job.id,
+        "preview",
+        previewUrl,
+        previewVerification,
+      );
+      const finalFile = makeStoredFile(
+        record.job.id,
+        "final",
+        sourceUrl,
+        sourceVerification,
+      );
+      const submittedSourceFile = makeStoredFile(
+        record.job.id,
+        "submitted-source",
+        sourceUrl,
+        sourceVerification,
+      );
+
       await postJson(`/jobs/${record.job.id}/upload-preview`, {
         previewFile,
       });
@@ -252,6 +272,29 @@ async function postJson(url: string, body: Record<string, unknown>) {
   return payload;
 }
 
+async function verifySwarmUrl(url: string): Promise<{
+  storageKind: "generic_url" | "swarm_immutable" | "swarm_feed";
+  verification: VerificationResult | null;
+}> {
+  const payload = await postJson("/api/swarm/verify", {
+    url,
+  });
+
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    "storageKind" in payload &&
+    typeof (payload as { storageKind?: unknown }).storageKind === "string"
+  ) {
+    return payload as {
+      storageKind: "generic_url" | "swarm_immutable" | "swarm_feed";
+      verification: VerificationResult | null;
+    };
+  }
+
+  throw new Error("Swarm verification payload was malformed.");
+}
+
 function isPreparedTransaction(value: unknown): value is {
   transaction: { to: string; value?: string; data: string };
 } {
@@ -266,11 +309,21 @@ function isPreparedTransaction(value: unknown): value is {
   );
 }
 
-function makeStoredFile(jobId: string, kind: string, url: string) {
+function makeStoredFile(
+  jobId: string,
+  kind: string,
+  url: string,
+  verificationResult: {
+    storageKind: "generic_url" | "swarm_immutable" | "swarm_feed";
+    verification: VerificationResult | null;
+  },
+) {
   return {
     id: `${kind}_${jobId}`,
     url,
     filename: filenameFromUrl(url),
+    storageKind: verificationResult.storageKind,
+    verification: verificationResult.verification,
   };
 }
 

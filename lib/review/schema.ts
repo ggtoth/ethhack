@@ -79,4 +79,11 @@ export type ReviewInputFile = {
   filePath?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  swarm?: {
+    requestedReference: string;
+    resolvedReference: string | null;
+    gatewayUrl: string;
+    verifiedAt: string;
+    referenceMatchesRequest: boolean;
+  };
 };

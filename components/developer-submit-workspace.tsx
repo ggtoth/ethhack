@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type ChangeEvent } from "react";
 
 import type { ReviewResult } from "@/lib/review/schema";
+import { computeSwarmFileReference } from "swarm-verified-fetch";
 
 type FlowStep = "accepted" | "submitted" | "reviewed";
 
@@ -12,9 +13,76 @@ type StoredFile = {
   id: string;
   url: string;
   filename: string;
+  storageKind?: "generic_url" | "swarm_immutable" | "swarm_feed";
+  verification?: {
+    status: "verified" | "failed";
+    kind: "immutable" | "feed_payload" | "feed_reference";
+    requestedUrl: string;
+    gatewayUrl: string;
+    resolvedReference: string | null;
+    verifiedAt: string;
+    feed: null;
+    details: {
+      rootChunkReference?: string;
+      manifestPath?: string | null;
+      chunkCount?: number | null;
+      notes?: string[];
+    };
+    error: null;
+  } | null;
+};
+
+type SwarmUploadDescriptor = {
+  clientId: string;
+  role: "source" | "preview";
+  expectedReference: string;
+  sha256: string;
+};
+
+type SwarmUploadedFile = {
+  clientId: string;
+  role: "source" | "preview" | "other";
+  fileName: string;
+  contentType: string;
+  size: number;
+  sha256: string;
+  localReference: string;
+  gatewayReference: string;
+  referenceMatchesGateway: boolean;
+  referenceMatchesClient: boolean | null;
+  downloadUrl: string;
+  gatewayUrl: string;
+  expectedReference: string | null;
+  filePath: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type SwarmUploadResponse = {
+  uploads?: SwarmUploadedFile[];
+  error?: string;
+};
+
+type SubmitResponsePayload = {
+  error?: string;
+  contract?: {
+    id: string;
+  } | null;
+};
+
+type SwarmReviewResult = ReviewResult & {
+  aiReview?: {
+    verdict: "pass" | "needs_revision" | "fail";
+    score: number;
+    summary: string;
+    issues: string[];
+  };
+  error?: string;
 };
 
 const jobId = "job_456";
+const defaultPreviewUrl = "https://demo.app/landing";
+const defaultSourceUrl = "https://github.com/demo/landing-source";
 const steps: Array<{ id: FlowStep; label: string }> = [
   { id: "accepted", label: "Job accepted" },
   { id: "submitted", label: "Work submitted" },
@@ -28,15 +96,15 @@ export function DeveloperSubmitWorkspace() {
   const [message, setMessage] = useState("Upload the finished work package.");
   const [projectFiles, setProjectFiles] = useState<File[]>([]);
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
-  const [previewUrl, setPreviewUrl] = useState("https://demo.app/landing");
-  const [sourceUrl, setSourceUrl] = useState("https://github.com/demo/landing-source");
+  const [previewUrl, setPreviewUrl] = useState(defaultPreviewUrl);
+  const [sourceUrl, setSourceUrl] = useState(defaultSourceUrl);
   const [workSummary, setWorkSummary] = useState(
     "Built the responsive landing page, connected the contact section, and included desktop/mobile screenshots.",
   );
   const [collaborationReview, setCollaborationReview] = useState(
     "Clear brief, quick answers, smooth handoff.",
   );
-  const [review, setReview] = useState<ReviewResult | null>(null);
+  const [review, setReview] = useState<SwarmReviewResult | null>(null);
   const canSubmitWork = projectFiles.length > 0 && previewFiles.length > 0;
   const progress = useMemo(
     () => Math.round((completed.length / steps.length) * 100),
@@ -51,29 +119,36 @@ export function DeveloperSubmitWorkspace() {
 
     setBusy(true);
     setReview(null);
-    setMessage("Submitting work package.");
-
-    const submittedSourceFiles = makeStoredFiles(projectFiles, "delivery");
-    const fallbackSource = makeUrlFile(jobId, "source", sourceUrl);
-    const sourceFiles = submittedSourceFiles.length > 0
-      ? submittedSourceFiles
-      : [fallbackSource];
-    const previewFile = makeUrlFile(jobId, "preview", previewUrl);
-    const finalFile = sourceFiles[0] ?? fallbackSource;
+    setMessage("Computing Swarm fingerprints and uploading files.");
 
     try {
+      const sourceUploads = await uploadFilesToSwarm(projectFiles, "source");
+      const previewUploads = await uploadFilesToSwarm(previewFiles, "preview");
+      const previewUpload = previewUploads[0];
+      const finalUpload = sourceUploads[0];
+      const submittedSourceFiles = sourceUploads.map((file, index) =>
+        toSwarmStoredFile(file, "delivery", index + 1),
+      );
+      const previewFile = toSwarmStoredFile(previewUpload, "preview");
+      const finalFile = toSwarmStoredFile(finalUpload, "final");
+
       const submitResponse = await fetch(`/jobs/${jobId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           previewFile,
           finalFile,
-          submittedSourceFiles: sourceFiles,
-          submissionNotes: makeSubmissionNotes(workSummary, collaborationReview),
+          submittedSourceFiles,
+          submissionNotes: buildSubmissionNotes({
+            workSummary,
+            collaborationReview,
+            previewUrl,
+            sourceUrl,
+          }),
           requestReleaseOnChain: false,
         }),
       });
-      const submitPayload = (await submitResponse.json()) as { error?: string };
+      const submitPayload = (await submitResponse.json()) as SubmitResponsePayload;
 
       if (!submitResponse.ok) {
         setMessage(submitPayload.error ?? "The work package could not be submitted.");
@@ -83,32 +158,25 @@ export function DeveloperSubmitWorkspace() {
       setCompleted((existing) =>
         existing.includes("submitted") ? existing : [...existing, "submitted"],
       );
-      setMessage("Work submitted. AI review is running.");
+      setMessage("Work uploaded to Swarm. AI review is running from immutable references.");
       window.localStorage.removeItem("smartjobs:last-ai-review");
       window.localStorage.removeItem("smartjobs:last-ai-review-error");
       window.localStorage.setItem("smartjobs:last-ai-review-status", "pending");
       window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
-
-      const reviewFormData = new FormData();
-      reviewFormData.set("jobId", jobId);
-      reviewFormData.set("contractId", "contract_job_456");
-
-      for (const file of projectFiles) {
-        reviewFormData.append("sources", file);
-      }
-
-      for (const file of previewFiles) {
-        reviewFormData.append("previews", file);
-      }
-
       router.push("/review/pending");
 
-      const reviewResponse = await fetch("/api/review", {
+      const reviewResponse = await fetch("/api/review/swarm", {
         method: "POST",
-        body: reviewFormData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId,
+          contractId: submitPayload.contract?.id ?? `contract_${jobId}`,
+          sourceFiles: sourceUploads.map((file) => toSwarmReviewAsset(file)),
+          previewFiles: previewUploads.map((file) => toSwarmReviewAsset(file)),
+        }),
       });
       const reviewPayload = (await reviewResponse.json()) as
-        | ReviewResult
+        | SwarmReviewResult
         | { error?: string };
 
       if (!reviewResponse.ok || !isReviewResult(reviewPayload)) {
@@ -127,7 +195,14 @@ export function DeveloperSubmitWorkspace() {
       window.localStorage.setItem("smartjobs:last-ai-review", JSON.stringify(reviewPayload));
       window.localStorage.setItem("smartjobs:last-ai-review-status", "ready");
       window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
-      setMessage("AI review is ready for the freelancer and client.");
+      setMessage(reviewPayload.user_visible.summary);
+    } catch (error) {
+      const nextMessage =
+        error instanceof Error ? error.message : "The Swarm-backed submission failed.";
+      setMessage(nextMessage);
+      window.localStorage.setItem("smartjobs:last-ai-review-status", "error");
+      window.localStorage.setItem("smartjobs:last-ai-review-error", nextMessage);
+      window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
     } finally {
       setBusy(false);
     }
@@ -395,38 +470,124 @@ export function DeveloperSubmitWorkspace() {
   );
 }
 
-function makeStoredFiles(files: File[], role: string): StoredFile[] {
-  return files.map((file, index) => ({
-    id: `file_${role}_${jobId}_${index + 1}`,
-    url: `local-demo://${encodeURIComponent(file.name)}`,
-    filename: file.name,
-  }));
+async function uploadFilesToSwarm(
+  files: File[],
+  role: "source" | "preview",
+) {
+  const descriptors = await Promise.all(
+    files.map(async (file, index) => {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+
+      return {
+        clientId: `${role}_${index + 1}`,
+        role,
+        expectedReference: computeSwarmFileReference(bytes).reference,
+        sha256: await computeSha256(bytes),
+      } satisfies SwarmUploadDescriptor;
+    }),
+  );
+
+  const formData = new FormData();
+
+  files.forEach((file) => {
+    formData.append("files", file);
+  });
+  formData.set("descriptors", JSON.stringify(descriptors));
+
+  const response = await fetch("/api/swarm/upload", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = (await response.json()) as SwarmUploadResponse;
+
+  if (!response.ok || !payload.uploads || payload.uploads.length === 0) {
+    throw new Error(payload.error ?? "The Swarm upload did not return any files.");
+  }
+
+  return payload.uploads;
 }
 
-function makeUrlFile(job: string, role: string, url: string): StoredFile {
-  const trimmed = url.trim();
-  const filename = trimmed.split("/").filter(Boolean).at(-1) || `${role}.zip`;
+async function computeSha256(bytes: Uint8Array) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
 
+  return Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function toSwarmStoredFile(
+  file: SwarmUploadedFile,
+  role: string,
+  index = 1,
+): StoredFile {
   return {
-    id: `file_${role}_${job}`,
-    url: trimmed || `local-demo://${role}`,
-    filename,
+    id: `file_${role}_${jobId}_${index}`,
+    url: file.downloadUrl,
+    filename: file.fileName,
+    storageKind: "swarm_immutable",
+    verification: {
+      status: "verified",
+      kind: "immutable",
+      requestedUrl: `bzz://${file.gatewayReference}`,
+      gatewayUrl: file.gatewayUrl,
+      resolvedReference: file.gatewayReference,
+      verifiedAt: new Date().toISOString(),
+      feed: null,
+      details: {
+        rootChunkReference: file.localReference,
+        chunkCount: null,
+        manifestPath: null,
+        notes: [
+          `Client reference matched backend computation: ${file.referenceMatchesClient !== false}`,
+          `Backend reference matched gateway reference: ${file.referenceMatchesGateway}`,
+        ],
+      },
+      error: null,
+    },
   };
 }
 
-function makeSubmissionNotes(workSummary: string, collaborationReview: string) {
-  const summary = workSummary.trim();
-  const collaboration = collaborationReview.trim();
-
-  return [
-    summary ? `Work completed: ${summary}` : null,
-    collaboration ? `Client collaboration: ${collaboration}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+function toSwarmReviewAsset(file: SwarmUploadedFile) {
+  return {
+    clientId: file.clientId,
+    reference: file.gatewayReference,
+    fileName: file.fileName,
+    contentType: file.contentType,
+  };
 }
 
-function isReviewResult(value: ReviewResult | { error?: string }): value is ReviewResult {
+function buildSubmissionNotes({
+  workSummary,
+  collaborationReview,
+  previewUrl,
+  sourceUrl,
+}: {
+  workSummary: string;
+  collaborationReview: string;
+  previewUrl: string;
+  sourceUrl: string;
+}) {
+  const lines = [
+    workSummary.trim() ? `Work completed: ${workSummary.trim()}` : null,
+    collaborationReview.trim()
+      ? `Client collaboration: ${collaborationReview.trim()}`
+      : null,
+  ].filter((value): value is string => Boolean(value));
+  const trimmedPreview = previewUrl.trim();
+  const trimmedSource = sourceUrl.trim();
+
+  if (trimmedPreview && trimmedPreview !== defaultPreviewUrl) {
+    lines.push(`External preview URL: ${trimmedPreview}`);
+  }
+
+  if (trimmedSource && trimmedSource !== defaultSourceUrl) {
+    lines.push(`External source URL: ${trimmedSource}`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+function isReviewResult(value: SwarmReviewResult | { error?: string }): value is SwarmReviewResult {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -437,7 +598,7 @@ function isReviewResult(value: ReviewResult | { error?: string }): value is Revi
   );
 }
 
-function getReviewError(value: ReviewResult | { error?: string }) {
+function getReviewError(value: SwarmReviewResult | { error?: string }) {
   return "error" in value && value.error ? value.error : "The AI review failed.";
 }
 
