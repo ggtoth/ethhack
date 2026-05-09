@@ -3,51 +3,60 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import {
+  ensureSepoliaNetwork,
+  getEthereumProvider,
+  SEPOLIA_CHAIN_ID_DECIMAL,
+  type EthereumProvider,
+} from "@/lib/wallet/ethereum";
+
 const ETH_USD_RATE = 3500;
-const SEPOLIA_CHAIN_ID = "0xaa36a7";
-const SEPOLIA_PARAMS = {
-  chainId: SEPOLIA_CHAIN_ID,
-  chainName: "Sepolia",
-  nativeCurrency: {
-    name: "Sepolia ETH",
-    symbol: "ETH",
-    decimals: 18,
-  },
-  rpcUrls: ["https://rpc.sepolia.org"],
-  blockExplorerUrls: ["https://sepolia.etherscan.io"],
-};
-const escrowAddress = "0x1111111111111111111111111111111111111111";
-const testEthValueWei = BigInt("10000000000000");
-const testEthValueHex = `0x${testEthValueWei.toString(16)}`;
 const gasEstimate = "< 0.0001 SepoliaETH";
 
-type EthereumProvider = {
-  request: <T = unknown>(args: { method: string; params?: unknown[] }) => Promise<T>;
+type CreateState =
+  | { status: "idle" }
+  | { status: "creating" }
+  | { status: "confirming_wallet" }
+  | { status: "recording_ledger"; txHash: string }
+  | { status: "funded"; jobId: string; txHash: string }
+  | { status: "error"; message: string };
+
+type CreatedJobPayload = {
+  id: string;
+  contractId: string;
+  title: string;
+  description: string;
+  budget: number;
+  deadline: string;
+  requirements: string;
+  status: string;
+  contract: {
+    id: string;
+    amount: number;
+    currency: string;
+  };
 };
 
-async function ensureSepolia(provider: EthereumProvider) {
-  const activeChainId = await provider.request<string>({ method: "eth_chainId" });
-
-  if (activeChainId === SEPOLIA_CHAIN_ID) return;
-
-  try {
-    await provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: SEPOLIA_CHAIN_ID }],
-    });
-  } catch (switchError) {
-    const code = typeof switchError === "object" && switchError && "code" in switchError
-      ? Number((switchError as { code: unknown }).code)
-      : 0;
-
-    if (code !== 4902) throw switchError;
-
-    await provider.request({
-      method: "wallet_addEthereumChain",
-      params: [SEPOLIA_PARAMS],
-    });
-  }
-}
+type PreparedFunding = {
+  jobId: string;
+  contractId: string;
+  transaction: {
+    chainId: number;
+    chainIdHex: string;
+    to: string;
+    value?: string;
+    data: string;
+    contractAddress: string;
+  };
+  confirmation: {
+    href: string;
+    body: {
+      id: string;
+      contractId: string;
+      amountEth: string;
+    };
+  };
+};
 
 export function CreateJobForm() {
   const router = useRouter();
@@ -55,8 +64,7 @@ export function CreateJobForm() {
   const [details, setDetails] = useState("");
   const [budgetUsd, setBudgetUsd] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [paymentStatus, setPaymentStatus] = useState<"idle" | "confirming" | "checking" | "funded">("idle");
-  const [error, setError] = useState("");
+  const [state, setState] = useState<CreateState>({ status: "idle" });
   const budgetDisplay = budgetUsd.trim() ? Number(budgetUsd).toLocaleString("en-US") : "0";
 
   const budgetEth = useMemo(() => {
@@ -74,45 +82,86 @@ export function CreateJobForm() {
     "w-full rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-[14px] font-black text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] placeholder:opacity-60 focus:border-[var(--text-primary)]";
 
   async function createAndFund() {
-    setError("");
-    const provider = (window as Window & { ethereum?: EthereumProvider }).ethereum;
-
-    if (!provider) {
-      setError("MetaMask is not installed.");
+    if (
+      !ready ||
+      state.status === "creating" ||
+      state.status === "confirming_wallet" ||
+      state.status === "recording_ledger"
+    ) {
       return;
     }
 
-    setPaymentStatus("confirming");
+    setState({ status: "creating" });
 
     try {
-      const accounts = await provider.request<string[]>({ method: "eth_requestAccounts" });
+      const budget = Number(budgetUsd);
+
+      if (!Number.isFinite(budget) || budget <= 0) {
+        throw new Error("Enter a valid budget before continuing.");
+      }
+
+      const response = await fetch("/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: details.trim(),
+          requirements: details.trim(),
+          budget: Number(budgetEth),
+          sourceFiles: attachedFiles.map((file, index) => ({
+            id: `source_${index + 1}_${file.lastModified}`,
+            url: `smartjobs-upload://${encodeURIComponent(file.name)}`,
+            filename: file.name,
+          })),
+        }),
+      });
+      const payload = (await response.json()) as
+        | CreatedJobPayload
+        | { error?: string };
+
+      if (!response.ok || !isCreatedJobPayload(payload)) {
+        throw new Error(
+          "error" in payload && payload.error ? payload.error : "Could not create the job.",
+        );
+      }
+
+      const provider = getEthereumProvider();
+
+      if (!provider) {
+        throw new Error("Connect a wallet to fund escrow.");
+      }
+
+      setState({ status: "confirming_wallet" });
+
+      const accounts = await provider.request<string[]>({
+        method: "eth_requestAccounts",
+      });
       const from = accounts[0];
 
       if (!from) {
         throw new Error("No wallet account selected.");
       }
 
-      await ensureSepolia(provider);
+      await ensureSepoliaNetwork(provider);
 
-      await provider.request<string>({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from,
-            to: escrowAddress,
-            value: testEthValueHex,
-          },
-        ],
+      const prepared = await prepareFunding(payload);
+      const txHash = await sendPreparedTransaction(provider, from, prepared);
+
+      setState({ status: "recording_ledger", txHash });
+
+      await confirmFunding(prepared, payload, from, txHash);
+      setState({ status: "funded", jobId: payload.id, txHash });
+      router.push(`/my-jobs?job=${encodeURIComponent(payload.id)}`);
+    } catch (error) {
+      setState({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not create and fund the job.",
       });
-
-      setPaymentStatus("checking");
-      window.setTimeout(() => {
-        setPaymentStatus("funded");
-        window.setTimeout(() => router.push("/jobs/landing-page-implementation"), 1300);
-      }, 1600);
-    } catch {
-      setPaymentStatus("idle");
-      setError("Payment was rejected or failed.");
     }
   }
 
@@ -126,9 +175,9 @@ export function CreateJobForm() {
           </h1>
         </div>
         <div className="rounded-[12px] bg-[var(--text-primary)] px-4 py-3 text-[var(--background)]">
-          <p className="text-[11px] font-black uppercase opacity-65">You will fund</p>
+          <p className="text-[11px] font-black uppercase opacity-65">Maximum budget</p>
           <p className="mt-1 text-[22px] font-black leading-none">${budgetDisplay}</p>
-          <p className="mt-1 text-[11px] font-black opacity-65">{budgetEth} ETH estimate</p>
+          <p className="mt-1 text-[11px] font-black opacity-65">{budgetEth} ETH target</p>
         </div>
       </div>
 
@@ -211,7 +260,7 @@ export function CreateJobForm() {
             <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Budget</p>
             <div className="mt-4 grid grid-cols-2 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-1 text-[12px] font-black">
               <span className="rounded-[9px] bg-[var(--text-primary)] px-3 py-2 text-center text-[var(--background)]">
-                USDT
+                USD
               </span>
               <span className="px-3 py-2 text-center text-[var(--text-muted)]">ETH</span>
             </div>
@@ -239,50 +288,45 @@ export function CreateJobForm() {
                   : "No files attached"}
               </p>
               <p className="text-[18px] font-black text-[var(--text-primary)]">
-                ${budgetDisplay} USDT
+                ${budgetDisplay} max budget
               </p>
-              <p>{budgetEth} ETH estimate</p>
+              <p>{budgetEth} ETH target</p>
               <p>Network fee: {gasEstimate}</p>
             </div>
           </div>
 
-          {error && (
+          {state.status === "error" && (
             <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[12px] font-black text-[var(--text-primary)]">
-              {error}
+              {state.message}
             </p>
           )}
 
-          {paymentStatus === "checking" && (
-            <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--text-primary)]" />
-              <span className="text-[12px] font-black text-[var(--text-primary)]">
-                Checking payment...
-              </span>
-            </div>
-          )}
-
-          {paymentStatus === "funded" && (
-            <div className="rounded-[12px] border border-[var(--border-strong)] bg-[var(--success-bg)] p-3">
-              <p className="text-[12px] font-black uppercase text-[var(--success)]">Funded</p>
-              <p className="mt-2 text-[13px] font-black text-[var(--text-primary)]">
-                Opening funded job...
-              </p>
-            </div>
+          {state.status === "recording_ledger" && (
+            <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[12px] font-black text-[var(--text-primary)]">
+              Recording funding transaction: {state.txHash}
+            </p>
           )}
 
           <button
             className="inline-flex h-11 items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] disabled:opacity-45"
-            disabled={!ready || paymentStatus === "confirming" || paymentStatus === "checking" || paymentStatus === "funded"}
+            disabled={
+              !ready ||
+              state.status === "creating" ||
+              state.status === "confirming_wallet" ||
+              state.status === "recording_ledger"
+            }
             type="button"
             onClick={createAndFund}
           >
-            {paymentStatus === "confirming"
-              ? "Confirm in MetaMask..."
-              : paymentStatus === "checking"
-                ? "Checking..."
-                : paymentStatus === "funded"
-                  ? "Funded"
-                  : "Create + fund"}
+            {state.status === "creating"
+              ? "Creating job..."
+              : state.status === "confirming_wallet"
+                ? "Confirm in wallet..."
+                : state.status === "recording_ledger"
+                  ? "Recording..."
+                  : state.status === "funded"
+                    ? "Funded"
+                    : "Create job & fund escrow"}
           </button>
         </aside>
       </section>
@@ -300,4 +344,99 @@ function formatFileSize(size: number) {
   }
 
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function isCreatedJobPayload(value: unknown): value is CreatedJobPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    "contract" in value &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    typeof (value as { contract?: { id?: unknown; amount?: unknown; currency?: unknown } }).contract
+      ?.id === "string" &&
+    typeof (value as { contract?: { id?: unknown; amount?: unknown; currency?: unknown } }).contract
+      ?.amount === "number" &&
+    typeof (value as { contract?: { id?: unknown; amount?: unknown; currency?: unknown } }).contract
+      ?.currency === "string"
+  );
+}
+
+async function prepareFunding(record: CreatedJobPayload) {
+  const response = await fetch("/escrow-contracts/onchain/fund/prepare", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      jobId: record.id,
+      contractId: record.contract.id,
+      amountEth: String(record.contract.amount),
+    }),
+  });
+  const payload = (await response.json()) as PreparedFunding | { error?: string };
+
+  if (!response.ok || !("transaction" in payload)) {
+    throw new Error(
+      "error" in payload && payload.error
+        ? payload.error
+        : "Could not prepare funding transaction.",
+    );
+  }
+
+  return payload;
+}
+
+async function sendPreparedTransaction(
+  provider: EthereumProvider,
+  from: string,
+  prepared: PreparedFunding,
+) {
+  return provider.request<string>({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from,
+        to: prepared.transaction.to,
+        value: prepared.transaction.value ?? "0x0",
+        data: prepared.transaction.data,
+      },
+    ],
+  });
+}
+
+async function confirmFunding(
+  prepared: PreparedFunding,
+  record: CreatedJobPayload,
+  clientWalletAddress: string,
+  transactionHash: string,
+) {
+  const response = await fetch(prepared.confirmation.href, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ...prepared.confirmation.body,
+      title: record.title,
+      description: record.description,
+      budget: record.budget,
+      deadline: record.deadline,
+      requirements: record.requirements,
+      status: record.status,
+      transactionHash,
+      clientWalletAddress,
+      escrowAddress: prepared.transaction.contractAddress,
+      chainId: SEPOLIA_CHAIN_ID_DECIMAL,
+      escrow: {
+        amount: record.contract.amount,
+        currency: record.contract.currency,
+      },
+    }),
+  });
+  const payload = (await response.json()) as { error?: string };
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Could not confirm funding.");
+  }
 }

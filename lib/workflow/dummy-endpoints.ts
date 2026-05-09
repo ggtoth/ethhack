@@ -15,6 +15,7 @@ import {
 } from "@/lib/workflow/domain-schema";
 import type { SwarmKvEntry } from "@/lib/swarm/types";
 import { getConfiguredEscrowAddress } from "@/lib/contracts/onchain-escrow-actions";
+import type { ReviewResult } from "@/lib/review/schema";
 import { SEPOLIA_CHAIN_ID_DECIMAL } from "@/lib/wallet/ethereum";
 
 export type DummyJobStatus = JobStatus;
@@ -251,7 +252,7 @@ const globalForDummyStore = globalThis as typeof globalThis & {
   __smartjobsDummyStore?: DummyStore;
 };
 
-const store = globalForDummyStore.__smartjobsDummyStore ?? createSeededStore();
+const store = globalForDummyStore.__smartjobsDummyStore ?? createEmptyStore();
 
 if (globalForDummyStore.__smartjobsDummyStore === undefined) {
   globalForDummyStore.__smartjobsDummyStore = store;
@@ -335,20 +336,22 @@ export function createDummyJob(input: unknown = {}) {
   const now = new Date().toISOString();
   const id = parsedInput.id ?? makeGeneratedJobId();
   const contractId = parsedInput.contractId ?? `contract_${id}`;
+  const initialEscrowStatus =
+    parsedInput.escrow?.status ?? getInitialEscrowStatus(jobStatusFromInput(parsedInput.status));
   const job = parseJob({
     id,
     contractId,
-    title: parsedInput.title ?? "New dummy job",
+    title: parsedInput.title ?? "New job",
     description:
-      parsedInput.description ?? "This is a stubbed job creation response.",
+      parsedInput.description ?? "Client-created job waiting for escrow funding.",
     budget: parsedInput.budget ?? 150,
     deadline: parsedInput.deadline ?? "2026-06-30",
     requirements:
-      parsedInput.requirements ?? "Dummy requirements for frontend integration.",
+      parsedInput.requirements ?? "Requirements will be provided during job creation.",
     status: parsedInput.status ?? "open",
     createdBy: parsedInput.createdBy ?? DUMMY_CLIENT_ID,
     assignedTo: parsedInput.assignedTo ?? null,
-    sourceFiles: parsedInput.sourceFiles ?? [makeSourceFile(id)],
+    sourceFiles: parsedInput.sourceFiles ?? [],
     submittedSourceFiles: parsedInput.submittedSourceFiles ?? [],
     previewFile: parsedInput.previewFile ?? null,
     finalFile: parsedInput.finalFile ?? null,
@@ -373,8 +376,11 @@ export function createDummyJob(input: unknown = {}) {
     amount: parsedInput.escrow?.amount ?? job.budget,
     bidAmount: parsedInput.escrow?.bidAmount ?? 0,
     currency: parsedInput.escrow?.currency ?? DEFAULT_ESCROW_CURRENCY,
-    status: parsedInput.escrow?.status ?? getInitialEscrowStatus(job.status),
-    fundedAt: pickNullableDefined(parsedInput.escrow?.fundedAt, now),
+    status: initialEscrowStatus,
+    fundedAt: pickNullableDefined(
+      parsedInput.escrow?.fundedAt,
+      initialEscrowStatus === "funded" ? now : null,
+    ),
     lockedAt: pickNullableDefined(parsedInput.escrow?.lockedAt, null),
     releaseRequestedAt: pickNullableDefined(
       parsedInput.escrow?.releaseRequestedAt,
@@ -385,17 +391,22 @@ export function createDummyJob(input: unknown = {}) {
     cancelledAt: pickNullableDefined(parsedInput.escrow?.cancelledAt, null),
     transactionHash: pickNullableDefined(
       parsedInput.escrow?.transactionHash,
-      `0xmock${id}`,
+      initialEscrowStatus === "funded" ? `0xmock${id}` : null,
     ),
-    chainId: pickNullableDefined(parsedInput.escrow?.chainId, 1),
+    chainId: pickNullableDefined(
+      parsedInput.escrow?.chainId,
+      initialEscrowStatus === "funded" ? 1 : null,
+    ),
     escrowAddress: pickNullableDefined(
       parsedInput.escrow?.escrowAddress,
-      `0x${id.replaceAll("_", "").padStart(40, "0").slice(-40)}`,
+      initialEscrowStatus === "funded"
+        ? `0x${id.replaceAll("_", "").padStart(40, "0").slice(-40)}`
+        : null,
     ),
     fundingTransactionHash:
       pickNullableDefined(
         parsedInput.escrow?.fundingTransactionHash,
-        `0xmockfunded${id}`,
+        initialEscrowStatus === "funded" ? `0xmockfunded${id}` : null,
       ),
     lockTransactionHash: pickNullableDefined(
       parsedInput.escrow?.lockTransactionHash,
@@ -747,6 +758,31 @@ export function requestDummyAiReview(jobId: string) {
     : null;
 }
 
+export function storeDummyAiReviewResult(jobId: string, review: ReviewResult) {
+  const job = store.jobs.get(jobId);
+
+  if (!job) {
+    return null;
+  }
+
+  const aiReview = mapReviewResultToAiReview(jobId, review);
+  const updatedJob = updateDummyJob(jobId, {
+    status: "ai_reviewed",
+    previewFile: job.previewFile ?? makePreviewFile(jobId),
+    aiReview,
+  });
+
+  return updatedJob
+    ? {
+        jobId: updatedJob.id,
+        status: updatedJob.status,
+        aiReview: updatedJob.aiReview,
+        contract: getDummyEscrowContract(updatedJob.contractId),
+        message: "AI review saved to the ledger",
+      }
+    : null;
+}
+
 export function toJobListItem(job: DummyJob) {
   return {
     id: job.id,
@@ -765,7 +801,7 @@ export function toJobListItem(job: DummyJob) {
 export function makePreviewFile(jobId: string): DummyFile {
   return {
     id: `file_preview_${jobId}`,
-    url: "https://dummy-filestore.com/preview.png",
+    url: `smartjobs-preview://${encodeURIComponent(jobId)}/preview.png`,
     filename: "preview.png",
   };
 }
@@ -773,8 +809,16 @@ export function makePreviewFile(jobId: string): DummyFile {
 export function makeFinalFile(jobId: string): DummyFile {
   return {
     id: `file_final_${jobId}`,
-    url: "https://dummy-filestore.com/final.zip",
+    url: `smartjobs-delivery://${encodeURIComponent(jobId)}/final.zip`,
     filename: "final.zip",
+  };
+}
+
+function createEmptyStore(): DummyStore {
+  return {
+    jobs: new Map(),
+    contracts: new Map(),
+    nextJobNumber: 1,
   };
 }
 
@@ -990,13 +1034,17 @@ function getInitialEscrowStatus(jobStatus: DummyJob["status"]) {
     return "locked" as const;
   }
 
-  return "funded" as const;
+  return "pending" as const;
+}
+
+function jobStatusFromInput(status: DummyJob["status"] | undefined) {
+  return status ?? "open";
 }
 
 function makeSourceFile(jobId: string): DummyFile {
   return {
     id: `file_source_${jobId}`,
-    url: "https://dummy-filestore.com/source-brief.pdf",
+    url: `smartjobs-source://${encodeURIComponent(jobId)}/source-brief.pdf`,
     filename: "source-brief.pdf",
   };
 }
@@ -1009,6 +1057,51 @@ function makeAiReview(jobId: string): DummyAiReview {
     summary: "The delivery mostly satisfies the job requirements.",
     issues: ["Source file is missing"],
   };
+}
+
+function mapReviewResultToAiReview(jobId: string, review: ReviewResult): DummyAiReview {
+  const score = getReviewScore(review);
+
+  return {
+    id: `review_${jobId}`,
+    verdict: score >= 0.8 ? "pass" : score >= 0.55 ? "needs_revision" : "fail",
+    score,
+    summary: review.user_visible.summary,
+    issues: [
+      ...collectVerdictIssues(review),
+      ...review.comparison_notes.key_gaps,
+      ...review.comparison_notes.ambiguities,
+    ].slice(0, 6),
+  };
+}
+
+function collectVerdictIssues(review: ReviewResult) {
+  return Object.values(review.verdicts)
+    .filter((entry) => entry.verdict !== "MATCH")
+    .map((entry) => entry.reason);
+}
+
+function getReviewScore(review: ReviewResult) {
+  const scores = [
+    verdictToScore(review.verdicts.preview_vs_source.verdict),
+    verdictToScore(review.verdicts.preview_vs_description.verdict),
+    verdictToScore(review.verdicts.source_vs_description.verdict),
+  ];
+
+  return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+}
+
+function verdictToScore(verdict: ReviewResult["verdicts"]["preview_vs_source"]["verdict"]) {
+  switch (verdict) {
+    case "MATCH":
+      return 0.94;
+    case "PARTIAL_MATCH":
+      return 0.72;
+    case "MISMATCH":
+      return 0.32;
+    case "INSUFFICIENT_EVIDENCE":
+      return 0.45;
+  }
 }
 
 function makeGeneratedJobId() {

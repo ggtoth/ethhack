@@ -4,27 +4,27 @@ export default function Home() {
   const steps = [
     {
       title: "Create brief",
-      body: "Describe the work and set the ETH budget.",
-      action: "Start",
-      href: "/wallet",
+      body: "Describe the work, attach references, and fund the escrow in one step.",
+      action: "Create job",
+      href: "/post-job",
     },
     {
-      title: "Fund escrow",
-      body: "Connect wallet and lock payment before work starts.",
-      action: "Connect",
-      href: "/wallet",
+      title: "Accept job",
+      body: "A freelancer picks up the funded job and locks it to their wallet.",
+      action: "Browse jobs",
+      href: "/browse-jobs",
     },
     {
       title: "Submit work",
-      body: "Freelancer adds proof links and notes.",
-      action: "Proof",
-      href: "/submit-work",
+      body: "The freelancer uploads previews, submits the source package, and requests release.",
+      action: "Open jobs",
+      href: "/my-jobs",
     },
     {
       title: "Review and release",
-      body: "AI checks proof. Client releases escrow.",
-      action: "Review",
-      href: "/ai-review",
+      body: "AI checks the delivery and the buyer decides whether to release or refund.",
+      action: "Review jobs",
+      href: "/my-jobs",
     },
   ];
 
@@ -44,9 +44,9 @@ export default function Home() {
         <div className="mt-5 flex w-full max-w-[340px] gap-3 sm:w-auto sm:max-w-none">
           <Link
             className="inline-flex h-[50px] flex-1 items-center justify-center rounded-[10px] bg-[var(--button)] px-10 text-[15px] font-black text-[var(--button-text)] shadow-none transition hover:bg-[var(--accent-hover)] sm:w-40 sm:flex-none"
-            href="/wallet"
+            href="/post-job"
           >
-            Start
+            Create job
           </Link>
           <Link
             className="inline-flex h-[50px] flex-1 items-center justify-center rounded-[10px] border border-[var(--border-strong)] bg-transparent px-9 text-[15px] font-black text-[var(--text-primary)] transition hover:bg-[var(--surface)] sm:w-40 sm:flex-none"
@@ -58,7 +58,7 @@ export default function Home() {
 
         <div className="mt-8 w-full rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5 text-left shadow-[var(--shadow-soft)] sm:mt-9 sm:p-6">
           <div className="text-center">
-            <p className="text-[13px] text-[var(--text-muted)]">Demo flow</p>
+            <p className="text-[13px] text-[var(--text-muted)]">Core flow</p>
             <h2 className="mt-2 text-[15px] font-black text-[var(--text-primary)]">
               Step by step
             </h2>
@@ -69,8 +69,8 @@ export default function Home() {
                 How it works
               </h3>
               <p className="mt-3 text-[15px] leading-7 text-[var(--text-secondary)]">
-                Client posts a job. Freelancer submits proof. AI checks it. Escrow gets
-                released.
+                Buyer funds a job. Freelancer accepts it. Delivery goes through AI review.
+                Buyer releases or refunds from the same escrow flow.
               </p>
             </article>
             <article className="rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 sm:p-5">
@@ -78,7 +78,8 @@ export default function Home() {
                 Why escrow
               </h3>
               <p className="mt-3 text-[15px] leading-7 text-[var(--text-secondary)]">
-                Payment is locked before work starts. Release happens after proof review.
+                Payment is locked before work starts, and source access stays gated until the
+                buyer approves the reviewed delivery.
               </p>
             </article>
           </div>

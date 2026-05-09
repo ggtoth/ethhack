@@ -8,7 +8,7 @@ Reference notes for the current deployment and verification workflow live in
 ## Escrow model
 
 - The client calls `createEscrow` with ETH equal to the maximum job budget.
-- The client locks the selected freelancer with `lockEscrow`, including the accepted bid amount in wei.
+- The selected freelancer accepts the funded job with `lockEscrow`, which binds their wallet and accepted bid amount on-chain.
 - The accepted bid must be greater than zero and less than or equal to the funded amount.
 - On `release`, the freelancer receives the accepted bid and the client receives any unused remainder.
 - The backend never owns a wallet and never sends transactions. The UI wallet sends transactions and the backend records confirmed hashes in the in-memory ledger.

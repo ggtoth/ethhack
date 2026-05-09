@@ -1,6 +1,10 @@
 import { runBatchReview } from "@/lib/review/service";
 import type { ReviewInputFile } from "@/lib/review/schema";
-import { getDummyJobWithContract, updateDummyJob } from "@/lib/workflow/dummy-endpoints";
+import {
+  getDummyJobWithContract,
+  storeDummyAiReviewResult,
+  updateDummyJob,
+} from "@/lib/workflow/dummy-endpoints";
 import { createSwarmKVFromEnv, isSwarmKVConfigured } from "@/lib/swarm/swarm-kv-lib";
 import { swarmKvSet } from "@/lib/swarm/kv-store";
 
@@ -60,6 +64,8 @@ export async function POST(request: Request) {
       previewFiles: normalizedPreviews,
     });
 
+    storeDummyAiReviewResult(job.id, result);
+
     const kvPayload = {
       jobId: job.id,
       contractId: contract.id,
@@ -88,7 +94,6 @@ export async function POST(request: Request) {
           swarmRefs: { ...currentRefs, review: swarmRef, reviewManifest: swarmManifestRef },
         });
       } catch {
-        // Feeds failed — fall back to plain bytes
         const entry = await swarmKvSet(`job:${job.id}:review`, kvPayload).catch(() => null);
 
         if (entry) {

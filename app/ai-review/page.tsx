@@ -9,7 +9,12 @@ type AIReviewPageProps = {
 
 export default async function AIReviewPage({ searchParams }: AIReviewPageProps) {
   const query = await searchParams;
-  const jobId = getFirstQueryValue(query.job) ?? getFirstQueryValue(query.jobId) ?? "job_456";
+  const jobId = getFirstQueryValue(query.job) ?? getFirstQueryValue(query.jobId);
+
+  if (!jobId) {
+    notFound();
+  }
+
   const record = getDummyJobWithContract(jobId);
 
   if (!record) {
@@ -43,14 +48,19 @@ export default async function AIReviewPage({ searchParams }: AIReviewPageProps) 
             />
             <LedgerRow
               label="Final file"
-              value={record.job.finalFile?.url ?? "No final file submitted."}
+              value={
+                record.contract.status === "released"
+                  ? record.job.finalFile?.url ?? "No final file submitted."
+                  : "Hidden until the buyer releases escrow."
+              }
             />
             <LedgerRow
               label="Submitted source files"
               value={
+                record.contract.status === "released" &&
                 record.job.submittedSourceFiles.length > 0
                   ? record.job.submittedSourceFiles.map((file) => file.url).join(", ")
-                  : "No source package submitted."
+                  : "Hidden until the buyer releases escrow."
               }
             />
             <LedgerRow
