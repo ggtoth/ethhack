@@ -197,6 +197,15 @@ describe("workflow dummy in-memory store", () => {
     assert.equal(getDummyJob("job_456")?.status, "submitted");
   });
 
+  test("submitting an already release-requested job is idempotent", () => {
+    const firstSubmit = submitDummyJob("job_456");
+    const secondSubmit = submitDummyJob("job_456");
+
+    assert.equal(firstSubmit?.contract?.status, "release_requested");
+    assert.equal(secondSubmit?.contract?.status, "release_requested");
+    assert.equal(secondSubmit?.status, "submitted");
+  });
+
   test("updates and transitions escrow contracts explicitly", () => {
     const patched = updateDummyEscrowContract("contract_job_456", {
       disputeReason: "Needs client attention.",

@@ -672,9 +672,10 @@ export function submitDummyJob(jobId: string, input: DummySubmitInput = {}) {
     return null;
   }
 
+  const currentContract = getDummyEscrowContract(updatedJob.contractId);
   const contractResult =
-    input.requestReleaseOnChain === false
-      ? { contract: getDummyEscrowContract(updatedJob.contractId) }
+    input.requestReleaseOnChain === false || currentContract?.status !== "locked"
+      ? { contract: currentContract }
       : applyDummyEscrowContractAction(updatedJob.contractId, {
           action: "request_release",
         });
