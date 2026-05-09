@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, type ChangeEvent } from "react";
 
 import type { ReviewResult } from "@/lib/review/schema";
@@ -21,6 +22,7 @@ const steps: Array<{ id: FlowStep; label: string }> = [
 ];
 
 export function DeveloperSubmitWorkspace() {
+  const router = useRouter();
   const [completed, setCompleted] = useState<FlowStep[]>(["accepted"]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Upload the finished work package.");
@@ -82,6 +84,10 @@ export function DeveloperSubmitWorkspace() {
         existing.includes("submitted") ? existing : [...existing, "submitted"],
       );
       setMessage("Work submitted. AI review is running.");
+      window.localStorage.removeItem("smartjobs:last-ai-review");
+      window.localStorage.removeItem("smartjobs:last-ai-review-error");
+      window.localStorage.setItem("smartjobs:last-ai-review-status", "pending");
+      window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
 
       const reviewFormData = new FormData();
       reviewFormData.set("jobId", jobId);
@@ -95,6 +101,8 @@ export function DeveloperSubmitWorkspace() {
         reviewFormData.append("previews", file);
       }
 
+      router.push("/review/pending");
+
       const reviewResponse = await fetch("/api/review", {
         method: "POST",
         body: reviewFormData,
@@ -104,7 +112,11 @@ export function DeveloperSubmitWorkspace() {
         | { error?: string };
 
       if (!reviewResponse.ok || !isReviewResult(reviewPayload)) {
-        setMessage(getReviewError(reviewPayload));
+        const error = getReviewError(reviewPayload);
+        window.localStorage.setItem("smartjobs:last-ai-review-status", "error");
+        window.localStorage.setItem("smartjobs:last-ai-review-error", error);
+        window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
+        setMessage(error);
         return;
       }
 
@@ -113,6 +125,8 @@ export function DeveloperSubmitWorkspace() {
       );
       setReview(reviewPayload);
       window.localStorage.setItem("smartjobs:last-ai-review", JSON.stringify(reviewPayload));
+      window.localStorage.setItem("smartjobs:last-ai-review-status", "ready");
+      window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
       setMessage("AI review is ready for the freelancer and client.");
     } finally {
       setBusy(false);
