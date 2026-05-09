@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const description = buildAuthoritativeDescription(job);
+    const description = buildAuthoritativeDescription(job, contract);
 
     const normalizedSources = sourceFiles.map((file, index) => {
       const clientId = `source_${index + 1}`;
@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       jobId: job.id,
       contractId: contract.id,
       description,
+      submissionNotes: job.submissionNotes ?? undefined,
       sourceFiles: normalizedSources,
       previewFiles: normalizedPreviews,
     });
@@ -103,13 +104,46 @@ function toReviewInputFile(
 }
 
 function buildAuthoritativeDescription(job: {
+  id: string;
+  contractId: string;
   title: string;
   description: string;
   requirements: string;
+  submittedSourceFiles: Array<{ filename: string; url: string }>;
+  previewFile: { filename: string; url: string } | null;
+  finalFile: { filename: string; url: string } | null;
+  submissionNotes: string | null;
+}, contract: {
+  status: string;
+  disputeReason: string | null;
 }) {
   return [
+    `Job ID: ${job.id}`,
+    `Contract ID: ${job.contractId}`,
     `Job title: ${job.title}`,
     `Job description: ${job.description}`,
     `Project requirements: ${job.requirements}`,
+    `Current escrow state: ${contract.status}`,
+    `Submitted source files: ${formatStoredFiles(job.submittedSourceFiles)}`,
+    `Preview file: ${formatStoredFile(job.previewFile)}`,
+    `Final file: ${formatStoredFile(job.finalFile)}`,
+    `Submission notes: ${job.submissionNotes ?? "None"}`,
+    `Dispute reason: ${contract.disputeReason ?? "None"}`,
   ].join("\n");
+}
+
+function formatStoredFile(file: { filename: string; url: string } | null) {
+  if (!file) {
+    return "None";
+  }
+
+  return `${file.filename} (${file.url})`;
+}
+
+function formatStoredFiles(files: Array<{ filename: string; url: string }>) {
+  if (files.length === 0) {
+    return "None";
+  }
+
+  return files.map((file) => `${file.filename} (${file.url})`).join(", ");
 }

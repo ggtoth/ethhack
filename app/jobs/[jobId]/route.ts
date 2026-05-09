@@ -1,4 +1,4 @@
-import { getDummyJob } from "@/lib/workflow/dummy-endpoints";
+import { getDummyJobWithContract } from "@/lib/workflow/dummy-endpoints";
 
 type JobRouteContext = {
   params: Promise<{ jobId: string }>;
@@ -6,11 +6,11 @@ type JobRouteContext = {
 
 export async function GET(_request: Request, context: JobRouteContext) {
   const { jobId } = await context.params;
-  const job = getDummyJob(jobId);
+  const record = getDummyJobWithContract(jobId);
 
-  if (!job) {
+  if (!record) {
     return Response.json({ error: "Job not found." }, { status: 404 });
   }
 
-  return Response.json(job);
+  return Response.json(record);
 }

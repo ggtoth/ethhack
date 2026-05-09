@@ -3,34 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const SEPOLIA_CHAIN_ID = "0xaa36a7";
-const SEPOLIA_PARAMS = {
-  chainId: SEPOLIA_CHAIN_ID,
-  chainName: "Sepolia",
-  nativeCurrency: {
-    name: "Sepolia ETH",
-    symbol: "ETH",
-    decimals: 18,
-  },
-  rpcUrls: ["https://rpc.sepolia.org"],
-  blockExplorerUrls: ["https://sepolia.etherscan.io"],
-};
-
-type EthereumProvider = {
-  isMetaMask?: boolean;
-  request: <T = unknown>(args: { method: string; params?: unknown[] }) => Promise<T>;
-  on?: (event: "accountsChanged" | "chainChanged", handler: (...args: unknown[]) => void) => void;
-  removeListener?: (
-    event: "accountsChanged" | "chainChanged",
-    handler: (...args: unknown[]) => void,
-  ) => void;
-};
-
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider;
-  }
-}
+import {
+  SEPOLIA_CHAIN_ID,
+  SEPOLIA_PARAMS,
+  type EthereumProvider,
+} from "@/lib/wallet/ethereum";
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
