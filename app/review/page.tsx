@@ -70,9 +70,11 @@ export default function ReviewPage() {
           <h1 className="rating-title mt-2 text-4xl font-black uppercase leading-tight text-[var(--review-zone)] sm:text-5xl">
             {display.rating}
           </h1>
-          <div className="approval-chip mx-auto mt-4 w-fit rounded-full bg-[var(--review-zone-bg)] px-5 py-2 text-[13px] font-black text-[var(--review-zone)]">
-            {display.recommendation}
-          </div>
+          {display.canDownload && (
+            <div className="approval-chip mx-auto mt-4 w-fit rounded-full bg-[var(--review-zone-bg)] px-5 py-2 text-[13px] font-black text-[var(--review-zone)]">
+              {display.recommendation}
+            </div>
+          )}
 
           <div className="score-stage mx-auto mt-8 max-w-[500px] px-3 py-5">
             <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">
