@@ -819,6 +819,7 @@ function createEmptyStore(): DummyStore {
     jobs: new Map(),
     contracts: new Map(),
     nextJobNumber: 1,
+    swarmIndex: new Map(),
   };
 }
 
