@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -112,18 +113,26 @@ export default function ReviewPage() {
 
           <p className="mx-auto mt-5 max-w-[340px] text-[14px] leading-6 text-[var(--text-secondary)]">
             {display.canDownload
-              ? summary
+              ? "The work looks good. Download the files, then approve to release escrow."
               : "No worries. We will email you when there is an update."}
           </p>
 
           {display.canDownload ? (
-            <a
-              className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-[8px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] sm:w-auto sm:min-w-[220px]"
-              download="smartjobs-delivery-files.txt"
-              href={`data:text/plain;charset=utf-8,${encodeURIComponent(manifest)}`}
-            >
-              Download files
-            </a>
+            <div className="mx-auto mt-7 grid w-full max-w-[460px] gap-3 sm:grid-cols-2">
+              <a
+                className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-center text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--text-primary)]"
+                download="smartjobs-delivery-files.txt"
+                href={`data:text/plain;charset=utf-8,${encodeURIComponent(manifest)}`}
+              >
+                Download files
+              </a>
+              <Link
+                className="inline-flex min-h-12 items-center justify-center rounded-[8px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)]"
+                href="/profile?view=freelancer&payout=success"
+              >
+                Approve & release
+              </Link>
+            </div>
           ) : (
             <button
               className="mt-7 inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 text-center text-[14px] font-black text-[var(--text-muted)] sm:w-auto sm:min-w-[220px]"
@@ -143,6 +152,13 @@ export default function ReviewPage() {
                 {summary}
               </p>
             </div>
+          )}
+
+          {display.canDownload && (
+            <p className="mx-auto mt-4 max-w-[360px] text-[12px] leading-5 text-[var(--text-muted)]">
+              Approval releases the locked escrow and marks the freelancer wallet
+              as paid in the demo.
+            </p>
           )}
         </div>
       </section>
