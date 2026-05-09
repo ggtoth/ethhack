@@ -12,7 +12,11 @@
       "Bash(npx tsc *)",
       "Bash(npx next *)",
       "Bash(python -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('scripts',{}\\), indent=2\\)\\); print\\('devDeps:', list\\(p.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
