@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,11 +13,13 @@ const navItems = [
   { href: "/browse-jobs", label: "Jobs" },
   { href: "/submit-work", label: "Proof" },
   { href: "/ai-review", label: "Review" },
-  { href: "/profile", label: "Profile" },
+  { href: "/profile?view=customer", label: "Customer profile" },
+  { href: "/profile?view=freelancer", label: "Freelancer profile" },
 ];
 
 export function AppNavbar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
 
   return (
@@ -43,7 +45,7 @@ export function AppNavbar() {
         <div className="hidden items-center gap-5 lg:flex xl:gap-7">
           <ThemeToggle />
           {navItems.map((item) => {
-            const active = pathname === item.href;
+            const active = isActiveNavItem(item.href, pathname, searchParams);
 
             return (
               <Link
@@ -79,7 +81,7 @@ export function AppNavbar() {
         <div className="border-y border-[var(--border)] bg-[var(--background)] px-4 py-3 lg:hidden">
           <div className="mx-auto grid max-w-[480px] grid-cols-2 gap-2">
             {navItems.map((item) => {
-              const active = pathname === item.href;
+              const active = isActiveNavItem(item.href, pathname, searchParams);
 
               return (
                 <Link
@@ -101,4 +103,30 @@ export function AppNavbar() {
       )}
     </header>
   );
+}
+
+function isActiveNavItem(
+  href: string,
+  pathname: string,
+  searchParams: URLSearchParams,
+) {
+  const [hrefPath, hrefQuery] = href.split("?");
+
+  if (pathname !== hrefPath) {
+    return false;
+  }
+
+  if (!hrefQuery) {
+    return true;
+  }
+
+  const expected = new URLSearchParams(hrefQuery);
+
+  for (const [key, value] of expected.entries()) {
+    if (searchParams.get(key) !== value) {
+      return false;
+    }
+  }
+
+  return true;
 }

@@ -70,7 +70,7 @@ export function DeveloperSubmitWorkspace() {
       );
       setMessage(reviewPayload.message ?? "AI approved the work. Redirecting to wallet.");
       window.setTimeout(() => {
-        router.push("/profile?payout=success");
+        router.push("/profile?view=freelancer&payout=success");
       }, 700);
       return;
     } finally {

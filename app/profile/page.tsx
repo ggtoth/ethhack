@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 const freelancerSkills = ["Landing pages", "Next.js", "Web3 UI"];
 const customerTags = ["Mobile app", "Escrow", "AI review"];
 
@@ -22,18 +20,6 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   return (
     <main className="flex flex-1 bg-[var(--background)] px-4 py-8 text-[var(--text-primary)] sm:px-6 lg:px-8">
       <section className="mx-auto grid w-full max-w-[980px] gap-4">
-        <div className="profile-tabs mx-auto grid w-full max-w-[520px] grid-cols-2 rounded-[16px] p-1">
-          <ProfileTab active={view === "customer"} href="/profile?view=customer">
-            Customer profile
-          </ProfileTab>
-          <ProfileTab
-            active={view === "freelancer"}
-            href={`/profile?view=freelancer${showPayout ? "&payout=success" : ""}`}
-          >
-            Freelancer profile
-          </ProfileTab>
-        </div>
-
         {view === "customer" ? (
           <CustomerProfile />
         ) : (
@@ -211,29 +197,6 @@ function FreelancerProfile({ showPayout }: { showPayout: boolean }) {
   );
 }
 
-function ProfileTab({
-  active,
-  children,
-  href,
-}: {
-  active: boolean;
-  children: React.ReactNode;
-  href: string;
-}) {
-  return (
-    <Link
-      className={`rounded-[12px] px-4 py-3 text-center text-[13px] font-black transition ${
-        active
-          ? "bg-[var(--text-primary)] text-[var(--background)]"
-          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-      }`}
-      href={href}
-    >
-      {children}
-    </Link>
-  );
-}
-
 function ProfileFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-t border-[var(--border)] pt-3">
@@ -320,7 +283,6 @@ function getFirstParam(value?: string | string[]) {
 function ProfileStyles() {
   return (
     <style>{`
-      .profile-tabs,
       .profile-card {
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.56)),
@@ -331,7 +293,6 @@ function ProfileStyles() {
           inset 0 1px 0 rgba(255, 255, 255, 0.72);
       }
 
-      :root[data-theme="dark"] .profile-tabs,
       :root[data-theme="dark"] .profile-card {
         background:
           linear-gradient(180deg, rgba(32, 36, 43, 0.72), rgba(25, 27, 32, 0.58)),
