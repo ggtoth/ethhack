@@ -43,7 +43,7 @@
  */
 
 import { Binary } from "cafe-utility";
-import { Signature, EthAddress, Topic, Identifier } from "@ethersphere/bee-js";
+import { Signature } from "@ethersphere/bee-js";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -382,8 +382,11 @@ function readUint64LE(bytes: Uint8Array): number {
   return value;
 }
 
+// Pure JS hex encoding — works in browsers and Node.js (no Buffer needed)
 function toHex(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("hex");
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function hexToBytes(hex: string): Uint8Array {
