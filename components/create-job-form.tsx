@@ -54,7 +54,7 @@ export function CreateJobForm() {
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [budgetUsd, setBudgetUsd] = useState("");
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "confirming" | "checking" | "funded">("idle");
   const [error, setError] = useState("");
   const budgetDisplay = budgetUsd.trim() ? Number(budgetUsd).toLocaleString("en-US") : "0";
@@ -167,19 +167,42 @@ export function CreateJobForm() {
 
           <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
             <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Reference file
+              Reference files
             </p>
             <label className="mt-4 grid cursor-pointer gap-2 rounded-[12px] border border-dashed border-[var(--border)] bg-[var(--surface)] px-4 py-5 text-center transition hover:border-[var(--text-primary)]">
               <input
-                accept="image/*,.pdf,application/pdf"
+                accept="image/*,.pdf,application/pdf,.zip,.rar,.7z,.tar,.gz,.fig,.doc,.docx,.txt,.md"
                 className="sr-only"
+                multiple
                 type="file"
-                onChange={(event) => setAttachedFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => setAttachedFiles(Array.from(event.target.files ?? []))}
               />
-              <span className="truncate text-[13px] font-black text-[var(--text-primary)]">
-                {attachedFile ? attachedFile.name : "Upload PDF or image"}
+              <span className="text-[13px] font-black text-[var(--text-primary)]">
+                {attachedFiles.length > 0
+                  ? `${attachedFiles.length} files selected`
+                  : "Upload files or archive"}
+              </span>
+              <span className="text-[11px] font-black text-[var(--text-muted)]">
+                PDF, images, ZIP, RAR, 7Z, docs
               </span>
             </label>
+            {attachedFiles.length > 0 && (
+              <div className="mt-3 grid gap-2">
+                {attachedFiles.map((file) => (
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--surface)] px-3 py-2 text-[12px]"
+                    key={`${file.name}-${file.lastModified}`}
+                  >
+                    <span className="min-w-0 truncate font-black text-[var(--text-primary)]">
+                      {file.name}
+                    </span>
+                    <span className="shrink-0 text-[var(--text-muted)]">
+                      {formatFileSize(file.size)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -210,7 +233,11 @@ export function CreateJobForm() {
             </p>
             <div className="mt-4 grid gap-3 text-[12px] text-[var(--text-secondary)]">
               <p>{title || "Job title..."}</p>
-              <p>{attachedFile?.name || "No file attached"}</p>
+              <p>
+                {attachedFiles.length > 0
+                  ? `${attachedFiles.length} files attached`
+                  : "No files attached"}
+              </p>
               <p className="text-[18px] font-black text-[var(--text-primary)]">
                 ${budgetDisplay} USDT
               </p>
@@ -261,4 +288,16 @@ export function CreateJobForm() {
       </section>
     </div>
   );
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }

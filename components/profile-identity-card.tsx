@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 
 const badges = [
   { icon: "✓", label: "Verified", style: "bg-emerald-100 text-emerald-800 border-emerald-200" },
-  { icon: "⚡", label: "Fast", style: "bg-amber-100 text-amber-800 border-amber-200" },
   { icon: "◆", label: "Funded", style: "bg-sky-100 text-sky-800 border-sky-200" },
-  { icon: "★", label: "Top proof", style: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200" },
 ];
 
 export function ProfileIdentityCard() {
@@ -23,9 +21,9 @@ export function ProfileIdentityCard() {
   }, [imageUrl]);
 
   return (
-    <div className="flex flex-col gap-5 border-b border-[var(--border)] pb-5 md:flex-row md:items-end md:justify-between">
+    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-4">
-        <label className="group relative grid h-20 w-20 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface-elevated)]">
+        <label className="group relative grid h-20 w-20 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--surface-elevated)_78%,transparent)] shadow-[inset_0_0_0_1px_var(--border),0_18px_38px_rgba(15,23,42,0.06)]">
           <input
             accept="image/*"
             className="sr-only"
@@ -75,7 +73,7 @@ export function ProfileIdentityCard() {
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
             <span>Sepolia · active escrow user</span>
             <button
-              className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1 text-[11px] font-black uppercase text-[var(--text-primary)]"
+              className="rounded-full bg-[color-mix(in_srgb,var(--surface-strong)_74%,transparent)] px-3 py-1 text-[11px] font-black uppercase text-[var(--text-primary)]"
               type="button"
               onClick={async () => {
                 await navigator.clipboard.writeText(walletAddress);
@@ -85,7 +83,7 @@ export function ProfileIdentityCard() {
             >
               {copied ? "Copied" : "Copy profile"}
             </button>
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1 text-[11px] font-black text-[var(--text-muted)]">
+            <span className="rounded-full bg-[color-mix(in_srgb,var(--surface-strong)_74%,transparent)] px-3 py-1 text-[11px] font-black text-[var(--text-muted)]">
               0xBae26...7eAe3
             </span>
           </div>
@@ -99,22 +97,17 @@ export function ProfileIdentityCard() {
                 <span>{badge.label}</span>
               </span>
             ))}
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--border-strong)] px-2.5 py-1.5 text-[10px] font-black uppercase text-[var(--text-muted)]">
-              <span>+</span>
-              <span>Next badge</span>
-            </span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
+      <div className="flex flex-wrap gap-2 text-center">
         {[
           ["Active", "1"],
           ["Locked", "1,500"],
-          ["Role", "Both"],
         ].map(([label, value]) => (
           <div
-            className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3"
+            className="min-w-[86px] rounded-[14px] bg-[color-mix(in_srgb,var(--surface-elevated)_70%,transparent)] px-4 py-3 shadow-[inset_0_0_0_1px_var(--border)]"
             key={label}
           >
             <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">{label}</p>
