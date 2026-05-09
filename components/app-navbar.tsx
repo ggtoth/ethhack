@@ -11,7 +11,7 @@ const navItems = [
   { href: "/wallet", label: "Wallet" },
   { href: "/messages", label: "Inbox", kind: "inbox" },
   { href: "/post-job", label: "Create" },
-  { href: "/browse-jobs", label: "Jobs" },
+  { href: "/browse-jobs", label: "Freelancer start" },
   { href: "/submit-work", label: "Proof" },
   { href: "/ai-review", label: "Review" },
   { href: "/profile?view=customer", label: "Customer" },
