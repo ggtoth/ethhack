@@ -2,57 +2,231 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { getAddress } from "viem";
 
-import { aiReview, jobs } from "@/lib/marketplace-data";
 import { getReviewDisplay } from "@/lib/review/display";
 import type { ReviewResult } from "@/lib/review/schema";
+import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
 
-const reviewedJob = jobs.find((job) => job.id === "landing-page-implementation") ?? jobs[0];
+type JobRecord = {
+  job: {
+    id: string;
+    title: string;
+    status: string;
+    previewFile: StoredFile | null;
+    finalFile: StoredFile | null;
+    submittedSourceFiles: StoredFile[];
+    submissionNotes: string | null;
+    aiReview: {
+      verdict: "pass" | "needs_revision" | "fail";
+      score: number;
+      summary: string;
+      issues: string[];
+    } | null;
+  };
+  contract: {
+    id: string;
+    status: string;
+    clientWalletAddress: string | null;
+    freelancerWalletAddress: string | null;
+  };
+};
+
+type StoredFile = {
+  id: string;
+  url: string;
+  filename: string;
+};
+
+type ActionState =
+  | { status: "idle" }
+  | { status: "working"; label: string }
+  | { status: "error"; message: string }
+  | { status: "success"; message: string };
 
 export default function ReviewPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const variant = searchParams.get("case") ?? undefined;
+  const jobId = searchParams.get("job")?.trim() ?? "";
+  const [record, setRecord] = useState<JobRecord | null>(null);
   const [liveReview, setLiveReview] = useState<ReviewResult | null>(null);
-  const displayInput = liveReview ? reviewResultToDisplayInput(liveReview) : getDemoInput(variant);
+  const [state, setState] = useState<ActionState>({ status: "idle" });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRecord() {
+      if (!jobId) {
+        setRecord(null);
+        setLiveReview(null);
+        setState({
+          status: "error",
+          message: "Open the review page with a specific job ID.",
+        });
+        return;
+      }
+
+      try {
+        const response = await fetch(`/jobs/${encodeURIComponent(jobId)}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as JobRecord | { error?: string };
+
+        if (!response.ok || !("job" in payload)) {
+          throw new Error(
+            "error" in payload && payload.error ? payload.error : "Job not found.",
+          );
+        }
+
+        if (!cancelled) {
+          setRecord(payload);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Could not load the review.",
+          });
+        }
+      }
+    }
+
+    loadStoredReview(jobId, setLiveReview);
+    void loadRecord();
+
+    function handleReviewUpdate() {
+      loadStoredReview(jobId, setLiveReview);
+      void loadRecord();
+    }
+
+    window.addEventListener("smartjobs-ai-review-updated", handleReviewUpdate);
+    window.addEventListener("storage", handleReviewUpdate);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("smartjobs-ai-review-updated", handleReviewUpdate);
+      window.removeEventListener("storage", handleReviewUpdate);
+    };
+  }, [jobId]);
+
+  const displayInput = liveReview
+    ? reviewResultToDisplayInput(liveReview)
+    : aiReviewToDisplayInput(record?.job.aiReview);
   const display = getReviewDisplay(displayInput);
-  const summary = liveReview?.user_visible.summary ?? display.summary;
-  const manifest = [
-    "SmartJobs delivery files",
-    `Project: ${reviewedJob.title}`,
-    `AI score: ${display.score}/100`,
-    `AI confidence: ${display.confidence}/100`,
-    `Zone: ${display.zone}`,
-    display.canDownload ? "Files are ready for download." : "Files are blocked for manual review.",
-  ].join("\n");
+  const reviewSummary =
+    liveReview?.user_visible.summary ??
+    record?.job.aiReview?.summary ??
+    "The buyer will see the AI review here after the freelancer submits proof.";
+  const sourceReleased = record?.contract.status === "released";
+  const canDecide =
+    !!record?.job.aiReview &&
+    (record.contract.status === "locked" || record.contract.status === "release_requested");
+  const manifest = buildSourceManifest(record);
   const zoneStyle = {
     "--review-zone": display.color,
     "--review-zone-bg": display.background,
   } as CSSProperties;
 
-  useEffect(() => {
-    const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
-
-    if (!storedReview) {
+  async function decide(action: "release" | "refund") {
+    if (!record) {
       return;
     }
 
-    try {
-      const parsed = JSON.parse(storedReview) as unknown;
+    setState({
+      status: "working",
+      label: action === "release" ? "Releasing escrow..." : "Refunding buyer...",
+    });
 
-      if (isReviewResult(parsed)) {
-        setLiveReview(parsed);
+    try {
+      const provider = getEthereumProvider();
+
+      if (!provider) {
+        throw new Error("Connect the buyer wallet to decide this review.");
       }
-    } catch {
-      setLiveReview(null);
+
+      const accounts = await provider.request<string[]>({
+        method: "eth_requestAccounts",
+      });
+      const from = accounts[0];
+
+      if (!from) {
+        throw new Error("No wallet account selected.");
+      }
+
+      if (
+        record.contract.clientWalletAddress &&
+        getAddress(from) !== getAddress(record.contract.clientWalletAddress)
+      ) {
+        throw new Error(
+          `Connect the buyer wallet (${record.contract.clientWalletAddress}) before continuing.`,
+        );
+      }
+
+      await ensureSepoliaNetwork(provider);
+      const prepared = await postJson(
+        `/escrow-contracts/${record.contract.id}/onchain/prepare`,
+        { action },
+      );
+
+      if (!isPreparedTransaction(prepared)) {
+        throw new Error(`Escrow ${action} could not be prepared.`);
+      }
+
+      const transactionHash = await provider.request<string>({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from,
+            to: prepared.transaction.to,
+            value: prepared.transaction.value ?? "0x0",
+            data: prepared.transaction.data,
+          },
+        ],
+      });
+
+      const confirmed = await postJson(
+        `/escrow-contracts/${record.contract.id}/onchain/confirm`,
+        { action, transactionHash },
+      );
+
+      setRecord((current) =>
+        current && isConfirmedContractResponse(confirmed)
+          ? {
+              ...current,
+              job: {
+                ...current.job,
+                status: action === "release" ? "completed" : "cancelled",
+              },
+              contract: {
+                ...current.contract,
+                status: confirmed.contract.status,
+              },
+            }
+          : current,
+      );
+      setState({
+        status: "success",
+        message:
+          action === "release"
+            ? "Funds released to the freelancer. The source package is now available."
+            : "Escrow refunded to the buyer. Only the preview remains visible.",
+      });
+      router.refresh();
+    } catch (error) {
+      setState({
+        status: "error",
+        message:
+          error instanceof Error ? error.message : `Could not ${action} this escrow.`,
+      });
     }
-  }, []);
+  }
 
   return (
     <main className="relative flex flex-1 items-center overflow-hidden bg-[var(--background)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">
-      {display.zone === "good" && <Confetti />}
+      {display.zone === "good" && sourceReleased && <Confetti />}
 
-      <section className="mx-auto grid w-full max-w-[620px] gap-5">
+      <section className="mx-auto grid w-full max-w-[980px] gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div
           className="review-shell relative overflow-hidden rounded-[18px] p-6 text-center sm:p-10"
           style={zoneStyle}
@@ -71,16 +245,12 @@ export default function ReviewPage() {
           <h1 className="rating-title mt-2 text-4xl font-black uppercase leading-tight text-[var(--review-zone)] sm:text-5xl">
             {display.rating}
           </h1>
-          {display.canDownload && (
-            <div className="approval-chip mx-auto mt-4 w-fit rounded-full bg-[var(--review-zone-bg)] px-5 py-2 text-[13px] font-black text-[var(--review-zone)]">
-              {display.recommendation}
-            </div>
-          )}
+          <div className="approval-chip mx-auto mt-4 w-fit rounded-full bg-[var(--review-zone-bg)] px-5 py-2 text-[13px] font-black text-[var(--review-zone)]">
+            {display.recommendation}
+          </div>
 
           <div className="score-stage mx-auto mt-8 max-w-[500px] px-3 py-5">
-            <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">
-              Score
-            </p>
+            <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">Score</p>
             <p className="mt-1 text-6xl font-black leading-none text-[var(--text-primary)] sm:text-7xl">
               {display.score}
               <span className="text-2xl text-[var(--text-secondary)]"> /100</span>
@@ -93,14 +263,14 @@ export default function ReviewPage() {
             <div className="zone-meter mt-7">
               <div
                 className="zone-marker"
-                style={{ left: `${display.confidence}%` }}
+                style={{ left: `${display.score}%` }}
                 aria-hidden="true"
               >
-                <span>{display.confidence}</span>
+                <span>{display.score}</span>
               </div>
               <div
                 className="zone-fill"
-                style={{ width: `${display.confidence}%` }}
+                style={{ width: `${display.score}%` }}
                 aria-hidden="true"
               />
             </div>
@@ -111,56 +281,126 @@ export default function ReviewPage() {
             </div>
           </div>
 
-          <p className="mx-auto mt-5 max-w-[340px] text-[14px] leading-6 text-[var(--text-secondary)]">
-            {display.canDownload
-              ? "The work looks good. Download the files, then approve to release escrow."
-              : "No worries. We will email you when there is an update."}
+          <p className="mx-auto mt-5 max-w-[420px] text-[14px] leading-6 text-[var(--text-secondary)]">
+            {reviewSummary}
           </p>
 
-          {display.canDownload ? (
+          {sourceReleased ? (
             <div className="mx-auto mt-7 grid w-full max-w-[460px] gap-3 sm:grid-cols-2">
               <a
                 className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-center text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--text-primary)]"
-                download="smartjobs-delivery-files.txt"
+                download="smartjobs-source-package.txt"
                 href={`data:text/plain;charset=utf-8,${encodeURIComponent(manifest)}`}
               >
-                Download files
+                Download source package
               </a>
               <Link
                 className="inline-flex min-h-12 items-center justify-center rounded-[8px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)]"
-                href="/profile?view=freelancer&payout=success"
+                href={`/ai-review?job=${encodeURIComponent(jobId)}`}
+              >
+                View ledger details
+              </Link>
+            </div>
+          ) : canDecide ? (
+            <div className="mx-auto mt-7 grid w-full max-w-[460px] gap-3 sm:grid-cols-2">
+              <button
+                className="inline-flex min-h-12 items-center justify-center rounded-[8px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] disabled:opacity-60"
+                disabled={state.status === "working"}
+                type="button"
+                onClick={() => void decide("release")}
               >
                 Approve & release
-              </Link>
+              </button>
+              <button
+                className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-center text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--text-primary)] disabled:opacity-60"
+                disabled={state.status === "working"}
+                type="button"
+                onClick={() => void decide("refund")}
+              >
+                Reject & refund
+              </button>
             </div>
           ) : (
             <button
-              className="mt-7 inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 text-center text-[14px] font-black text-[var(--text-muted)] sm:w-auto sm:min-w-[220px]"
+              className="mt-7 inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 text-center text-[14px] font-black text-[var(--text-muted)] sm:w-auto sm:min-w-[260px]"
               disabled
               type="button"
             >
-              Download blocked
+              Source files stay locked until buyer approval
             </button>
           )}
 
-          {!display.canDownload && (
-            <div className="mx-auto mt-4 max-w-[380px] rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-left">
+          {!sourceReleased && (
+            <div className="mx-auto mt-4 max-w-[420px] rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-left">
               <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-                If you want the reason
+                Preview is visible
               </p>
-              <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-                {summary}
+              <p className="mt-2 break-all text-[12px] leading-5 text-[var(--text-secondary)]">
+                {record?.job.previewFile?.url ?? "No preview submitted yet."}
+              </p>
+              <p className="mt-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+                The source package stays hidden unless the buyer approves and releases funds.
               </p>
             </div>
           )}
 
-          {display.canDownload && (
+          {record?.contract.status === "refunded" && (
             <p className="mx-auto mt-4 max-w-[360px] text-[12px] leading-5 text-[var(--text-muted)]">
-              Approval releases the locked escrow and marks the freelancer wallet
-              as paid in the demo.
+              This escrow was refunded to the buyer. The preview remains visible, but the
+              source package is not released.
             </p>
           )}
         </div>
+
+        <aside className="review-shell rounded-[18px] p-5 text-left">
+          <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
+            Buyer checklist
+          </p>
+          <div className="mt-4 grid gap-3 text-[13px]">
+            <Detail label="Job" value={record?.job.title ?? jobId} />
+            <Detail
+              label="Escrow state"
+              value={record?.contract.status.replaceAll("_", " ") ?? "loading"}
+            />
+            <Detail
+              label="Freelancer payout"
+              value={record?.contract.freelancerWalletAddress ?? "Not accepted yet"}
+            />
+            <Detail
+              label="Preview"
+              value={record?.job.previewFile?.filename ?? "No preview uploaded"}
+            />
+            <Detail
+              label="Source access"
+              value={sourceReleased ? "Released to buyer" : "Blocked until release"}
+            />
+            <Detail
+              label="Submission notes"
+              value={record?.job.submissionNotes ?? "No notes stored."}
+            />
+          </div>
+
+          {(state.status === "working" || state.status === "error" || state.status === "success") && (
+            <div className="mt-5 rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+              {state.status === "working" ? state.label : state.message}
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-3">
+            <Link
+              className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+              href={`/submit-work?job=${encodeURIComponent(jobId)}`}
+            >
+              Back to submission
+            </Link>
+            <Link
+              className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+              href={`/ai-review?job=${encodeURIComponent(jobId)}`}
+            >
+              Review context
+            </Link>
+          </div>
+        </aside>
       </section>
 
       <style>{`
@@ -265,149 +505,81 @@ export default function ReviewPage() {
           top: 27px;
           height: 0;
           border-width: 0 0 4px;
-          border-radius: 999px;
         }
 
         .review-face--sad span {
-          top: 28px;
+          top: 24px;
           border-width: 4px 0 0;
           border-radius: 999px 999px 0 0;
         }
 
-        .rating-title {
-          letter-spacing: 0;
-          text-shadow:
-            0 0 24px color-mix(in srgb, var(--review-zone) 24%, transparent),
-            0 12px 34px color-mix(in srgb, var(--review-zone) 18%, transparent);
-          animation: rating-pop 760ms 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-        }
-
-        .approval-chip {
-          letter-spacing: 0;
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--review-zone) 24%, transparent),
-            0 14px 38px color-mix(in srgb, var(--review-zone) 18%, transparent);
-          animation: badge-bounce 760ms 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-        }
-
         .score-stage {
           position: relative;
-          overflow: hidden;
-          border-radius: 18px;
+          border-radius: 20px;
           background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.24)),
-            color-mix(in srgb, var(--surface-elevated) 72%, transparent);
-          box-shadow:
-            0 24px 70px color-mix(in srgb, var(--review-zone) 8%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.62);
-        }
-
-        :root[data-theme="dark"] .score-stage {
-          background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
-            color-mix(in srgb, var(--surface-elevated) 78%, transparent);
-          box-shadow:
-            0 24px 70px color-mix(in srgb, var(--review-zone) 10%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        }
-
-        .score-stage::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(
-            115deg,
-            transparent 0%,
-            transparent 36%,
-            rgba(255, 255, 255, 0.13) 47%,
-            transparent 58%,
-            transparent 100%
-          );
-          transform: translateX(-120%);
-          animation: shine-pass 1800ms 520ms ease-out both;
-          pointer-events: none;
-        }
-
-        .confidence-pill {
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--review-zone) 24%, transparent),
-            0 10px 28px color-mix(in srgb, var(--review-zone) 18%, transparent);
+            linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.34)),
+            color-mix(in srgb, var(--surface) 86%, white);
+          border: 1px solid color-mix(in srgb, var(--review-zone) 12%, rgba(20, 26, 35, 0.08));
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
         }
 
         .zone-meter {
           position: relative;
-          height: 18px;
-          overflow: visible;
+          height: 16px;
+          overflow: hidden;
           border-radius: 999px;
-          background: linear-gradient(90deg, #ef4444 0 34%, #eab308 34% 68%, #43c084 68% 100%);
-          box-shadow:
-            inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-            0 16px 38px color-mix(in srgb, var(--review-zone) 18%, transparent);
-        }
-
-        .zone-meter::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 58%);
-          pointer-events: none;
+          background:
+            linear-gradient(90deg, rgba(239, 68, 68, 0.22) 0%, rgba(234, 179, 8, 0.22) 50%, rgba(67, 192, 132, 0.24) 100%);
+          border: 1px solid rgba(20, 26, 35, 0.08);
         }
 
         .zone-fill {
           height: 100%;
           border-radius: inherit;
-          background: linear-gradient(90deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0));
-          mix-blend-mode: screen;
-          animation: meter-grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+          background:
+            linear-gradient(90deg, color-mix(in srgb, var(--review-zone) 22%, transparent), color-mix(in srgb, var(--review-zone) 42%, transparent));
         }
 
         .zone-marker {
           position: absolute;
-          top: -34px;
-          z-index: 2;
-          width: 42px;
+          top: -30px;
           transform: translateX(-50%);
-          color: var(--review-zone);
-        }
-
-        .zone-marker::after {
-          content: "";
-          display: block;
-          margin: 4px auto 0;
-          width: 14px;
-          height: 14px;
-          border: 3px solid var(--surface);
-          border-radius: 999px;
-          background: var(--review-zone);
-          box-shadow: 0 0 0 5px color-mix(in srgb, var(--review-zone) 20%, transparent);
         }
 
         .zone-marker span {
-          display: block;
+          display: inline-flex;
+          min-width: 38px;
+          justify-content: center;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--surface) 92%, white);
-          padding: 3px 0;
+          background: var(--review-zone);
+          padding: 4px 8px;
           font-size: 11px;
           font-weight: 900;
-          box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+          color: white;
+        }
+
+        .confidence-pill,
+        .approval-chip {
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
+        }
+
+        .rating-title {
+          animation: rating-pop 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
         }
 
         .confetti-piece {
-          position: fixed;
+          position: absolute;
           top: -18px;
-          z-index: 40;
-          width: 8px;
-          height: 14px;
-          border-radius: 2px;
-          pointer-events: none;
-          animation: confetti-fall 1200ms ease-out forwards;
+          width: 10px;
+          height: 18px;
+          border-radius: 999px;
+          animation: confetti-fall 1900ms linear infinite;
         }
 
         @keyframes happy-pop {
           0% {
             opacity: 0;
-            transform: scale(0.72) translateY(12px);
+            transform: scale(0.82) translateY(12px);
           }
           55% {
             opacity: 1;
@@ -427,36 +599,6 @@ export default function ReviewPage() {
           100% {
             opacity: 0;
             transform: scale(1.28);
-          }
-        }
-
-        @keyframes shine-pass {
-          0% {
-            transform: translateX(-120%);
-          }
-          100% {
-            transform: translateX(120%);
-          }
-        }
-
-        @keyframes meter-grow {
-          0% {
-            width: 0%;
-          }
-        }
-
-        @keyframes badge-bounce {
-          0% {
-            opacity: 0;
-            transform: translateY(8px) scale(0.9);
-          }
-          60% {
-            opacity: 1;
-            transform: translateY(-2px) scale(1.04);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
           }
         }
 
@@ -493,25 +635,63 @@ export default function ReviewPage() {
   );
 }
 
-function getDemoInput(variant: string | undefined) {
-  if (variant === "negative") {
-    return {
-      score: 22,
-      confidence: 31,
-      hasSuspiciousInput: true,
-    };
+function buildSourceManifest(record: JobRecord | null) {
+  if (!record) {
+    return "No job loaded.";
   }
 
-  if (variant === "medium") {
+  return [
+    `Job: ${record.job.title}`,
+    `Preview: ${record.job.previewFile?.url ?? "None"}`,
+    `Final package: ${record.job.finalFile?.url ?? "None"}`,
+    `Submitted source files: ${
+      record.job.submittedSourceFiles.length > 0
+        ? record.job.submittedSourceFiles.map((file) => file.url).join(", ")
+        : "None"
+    }`,
+    `Submission notes: ${record.job.submissionNotes ?? "None"}`,
+  ].join("\n");
+}
+
+function loadStoredReview(
+  jobId: string,
+  setLiveReview: (value: ReviewResult | null) => void,
+) {
+  const storedJobId = window.localStorage.getItem("smartjobs:last-ai-review-job-id");
+  const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
+
+  if (!storedReview || storedJobId !== jobId) {
+    setLiveReview(null);
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(storedReview) as unknown;
+
+    if (isReviewResult(parsed)) {
+      setLiveReview(parsed);
+      return;
+    }
+  } catch {
+    // Ignore parse failures and fall back to ledger state.
+  }
+
+  setLiveReview(null);
+}
+
+function aiReviewToDisplayInput(review: JobRecord["job"]["aiReview"] | null | undefined) {
+  if (!review) {
     return {
-      score: 68,
-      confidence: 72,
+      score: 0,
+      confidence: 0,
+      hasSuspiciousInput: false,
     };
   }
 
   return {
-    score: aiReview.score,
-    confidence: 94,
+    score: Math.round(review.score * 100),
+    confidence: review.verdict === "pass" ? 91 : review.verdict === "needs_revision" ? 67 : 29,
+    hasSuspiciousInput: review.verdict === "fail",
   };
 }
 
@@ -570,6 +750,59 @@ function isReviewResult(value: unknown): value is ReviewResult {
     "verdicts" in value &&
     "comparison_notes" in value &&
     "user_visible" in value
+  );
+}
+
+function isPreparedTransaction(value: unknown): value is {
+  transaction: { to: string; value?: string; data: string };
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "transaction" in value &&
+    typeof (value as { transaction?: { to?: unknown; data?: unknown } }).transaction?.to ===
+      "string" &&
+    typeof (value as { transaction?: { to?: unknown; data?: unknown } }).transaction
+      ?.data === "string"
+  );
+}
+
+function isConfirmedContractResponse(
+  value: unknown,
+): value is { contract: { status: JobRecord["contract"]["status"] } } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "contract" in value &&
+    typeof (value as { contract?: { status?: unknown } }).contract?.status === "string"
+  );
+}
+
+async function postJson(url: string, body: Record<string, unknown>) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as { error?: string };
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Request failed.");
+  }
+
+  return payload;
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">{label}</p>
+      <p className="mt-2 break-all text-[13px] leading-5 text-[var(--text-primary)]">
+        {value}
+      </p>
+    </div>
   );
 }
 

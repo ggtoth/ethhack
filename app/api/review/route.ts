@@ -1,6 +1,9 @@
 import { runBatchReview } from "@/lib/review/service";
 import type { ReviewInputFile } from "@/lib/review/schema";
-import { getDummyJobWithContract } from "@/lib/workflow/dummy-endpoints";
+import {
+  getDummyJobWithContract,
+  storeDummyAiReviewResult,
+} from "@/lib/workflow/dummy-endpoints";
 
 export const runtime = "nodejs";
 
@@ -57,6 +60,8 @@ export async function POST(request: Request) {
       sourceFiles: normalizedSources,
       previewFiles: normalizedPreviews,
     });
+
+    storeDummyAiReviewResult(job.id, result);
 
     return Response.json(result);
   } catch (error) {

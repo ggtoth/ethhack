@@ -1,22 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function PendingReviewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<"pending" | "error">("pending");
   const [error, setError] = useState("The AI review failed.");
 
   useEffect(() => {
     let intervalId: number | null = null;
+    const jobId =
+      searchParams.get("job")?.trim() ||
+      window.localStorage.getItem("smartjobs:last-ai-review-job-id") ||
+      "";
+
+    if (!jobId) {
+      setStatus("error");
+      setError("Open the pending review page from a real job submission.");
+      return;
+    }
 
     function checkReviewStatus() {
       const storedStatus = window.localStorage.getItem("smartjobs:last-ai-review-status");
       const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
 
       if (storedStatus === "ready" && storedReview) {
-        router.replace("/review");
+        router.replace(`/review?job=${encodeURIComponent(jobId)}`);
         return true;
       }
 
@@ -57,7 +68,7 @@ export default function PendingReviewPage() {
       window.removeEventListener("smartjobs-ai-review-updated", handleReviewUpdate);
       window.removeEventListener("storage", handleReviewUpdate);
     };
-  }, [router]);
+  }, [router, searchParams]);
 
   return (
     <main className="flex flex-1 items-center bg-[var(--background)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">

@@ -40,6 +40,11 @@ export default function MyJobsPage() {
             </button>
           ))}
         </div>
+        {jobs.length === 0 && (
+          <article className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 text-[14px] leading-6 text-[var(--text-secondary)] shadow-[var(--shadow-card)]">
+            No live jobs are stored yet. Create and fund a job to start the escrow flow.
+          </article>
+        )}
         {jobs.map((job) => {
           const contract = contracts.get(job.id);
 

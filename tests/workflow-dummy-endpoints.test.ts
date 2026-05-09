@@ -82,9 +82,11 @@ describe("workflow dummy in-memory store", () => {
     assert.equal(created.contract.jobId, created.id);
     assert.equal(created.contract.amount, 150);
     assert.equal(created.contract.bidAmount, 0);
-    assert.equal(created.contract.status, "funded");
-    assert.equal(created.contract.chainId, 1);
-    assert.equal(created.contract.fundingTransactionHash, `0xmockfunded${created.id}`);
+    assert.equal(created.contract.status, "pending");
+    assert.equal(created.contract.chainId, null);
+    assert.equal(created.contract.fundingTransactionHash, null);
+    assert.equal(created.contract.transactionHash, null);
+    assert.equal(created.contract.fundedAt, null);
     assert.equal(created.message, "Job created successfully");
     assert.equal(getDummyJob(created.id)?.requirements, "Return data from the in-memory DB.");
     assert.equal(getDummyEscrowContract(created.contractId)?.jobId, created.id);
@@ -325,12 +327,12 @@ describe("workflow dummy in-memory store", () => {
     });
     assert.deepEqual(makePreviewFile("job_x"), {
       id: "file_preview_job_x",
-      url: "https://dummy-filestore.com/preview.png",
+      url: "smartjobs-preview://job_x/preview.png",
       filename: "preview.png",
     });
     assert.deepEqual(makeFinalFile("job_x"), {
       id: "file_final_job_x",
-      url: "https://dummy-filestore.com/final.zip",
+      url: "smartjobs-delivery://job_x/final.zip",
       filename: "final.zip",
     });
   });

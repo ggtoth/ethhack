@@ -35,56 +35,40 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
       return;
     }
 
-    setState({ status: "working", label: "Locking escrow..." });
+    setState({ status: "working", label: "Accepting job..." });
 
     try {
       const provider = getEthereumProvider();
 
       if (!provider) {
-        throw new Error("Connect a wallet to lock escrow.");
+        throw new Error("Connect a wallet to accept this job.");
       }
 
       const accounts = await provider.request<string[]>({
         method: "eth_requestAccounts",
       });
-      const clientWalletAddress = accounts[0];
+      const freelancerWalletAddress = accounts[0];
 
-      if (!clientWalletAddress) {
+      if (!freelancerWalletAddress) {
         throw new Error("No wallet account selected.");
       }
 
       if (
-        contract.clientWalletAddress &&
-        getAddress(clientWalletAddress) !== getAddress(contract.clientWalletAddress)
+        contract.freelancerWalletAddress &&
+        getAddress(freelancerWalletAddress) !== getAddress(contract.freelancerWalletAddress)
       ) {
         throw new Error(
-          `Connect the client wallet (${contract.clientWalletAddress}) that funded this escrow before locking it.`,
+          `Connect the accepted freelancer wallet (${contract.freelancerWalletAddress}) before continuing.`,
         );
       }
-
-      const freelancerWalletAddress = window.prompt(
-        "Freelancer wallet address on Sepolia.",
-      )?.trim();
-
-      if (!freelancerWalletAddress) {
-        throw new Error("Enter the freelancer wallet address to lock escrow.");
-      }
-
       const normalizedFreelancerWalletAddress = getAddress(freelancerWalletAddress);
-
-      const bidAmountEth = window.prompt(
-        "Accepted bid in ETH. Leave blank to use the full funded amount.",
-      );
-      const normalizedBidAmountEth = bidAmountEth?.trim() || undefined;
 
       await ensureSepoliaNetwork(provider);
       const prepared = await postJson(
         `/escrow-contracts/${contract.id}/onchain/prepare`,
         {
           action: "lock",
-          freelancerId: "freelancer_123",
           freelancerWalletAddress: normalizedFreelancerWalletAddress,
-          bidAmountEth: normalizedBidAmountEth,
         },
       );
 
@@ -96,7 +80,7 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
         method: "eth_sendTransaction",
         params: [
           {
-            from: clientWalletAddress,
+            from: freelancerWalletAddress,
             to: prepared.transaction.to,
             value: prepared.transaction.value ?? "0x0",
             data: prepared.transaction.data,
@@ -107,32 +91,15 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
       await postJson(`/escrow-contracts/${contract.id}/onchain/confirm`, {
         action: "lock",
         transactionHash,
-        freelancerId: "freelancer_123",
         freelancerWalletAddress: normalizedFreelancerWalletAddress,
-        bidAmountEth: normalizedBidAmountEth,
       });
 
-      setState({ status: "success", message: "Escrow locked for work." });
+      setState({ status: "success", message: "Job accepted and escrow locked to your wallet." });
       router.refresh();
     } catch (error) {
       setState({
         status: "error",
         message: error instanceof Error ? error.message : "Could not lock escrow.",
-      });
-    }
-  }
-
-  async function requestAiReview() {
-    setState({ status: "working", label: "Running AI review..." });
-
-    try {
-      await postJson(`/jobs/${job.id}/request-ai-review`, {});
-      setState({ status: "success", message: "AI review saved to the ledger." });
-      router.refresh();
-    } catch (error) {
-      setState({
-        status: "error",
-        message: error instanceof Error ? error.message : "Could not run AI review.",
       });
     }
   }
@@ -231,12 +198,6 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
         <Link className={buttonClass} href={`/submit-work?job=${job.id}`}>
           Submit work
         </Link>
-      )}
-
-      {job.status === "submitted" && (
-        <button className={buttonClass} type="button" onClick={requestAiReview}>
-          Run AI review
-        </button>
       )}
 
       {(contract?.status === "release_requested" || job.status === "ai_reviewed") && (

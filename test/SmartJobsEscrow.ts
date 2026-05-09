@@ -24,13 +24,17 @@ describe("SmartJobsEscrow", async function () {
     await escrow.write.createEscrow([escrowId, "job_release"], {
       value: fundedAmount,
     });
-    await escrow.write.lockEscrow([escrowId, freelancer.account.address, bidAmount]);
-
     const escrowAsFreelancer = await viem.getContractAt(
       "SmartJobsEscrow",
       escrow.address,
       { client: { wallet: freelancer } },
     );
+    await escrowAsFreelancer.write.lockEscrow([
+      escrowId,
+      freelancer.account.address,
+      bidAmount,
+    ]);
+
     await escrowAsFreelancer.write.requestRelease([escrowId]);
 
     const freelancerBalanceBefore = await publicClient.getBalance({
@@ -76,11 +80,40 @@ describe("SmartJobsEscrow", async function () {
       value: parseEther("0.2"),
     });
 
+    const escrowAsFreelancer = await viem.getContractAt(
+      "SmartJobsEscrow",
+      escrow.address,
+      { client: { wallet: freelancer } },
+    );
+
     await assert.rejects(
-      escrow.write.lockEscrow([
+      escrowAsFreelancer.write.lockEscrow([
         escrowId,
         freelancer.account.address,
         parseEther("0.25"),
+      ]),
+    );
+  });
+
+  it("requires the accepting freelancer to lock escrow with their own wallet", async function () {
+    const { escrow, freelancer, outsider } = await deployFixture();
+    const escrowId = stringToHex("contract_job_accept", { size: 32 });
+
+    await escrow.write.createEscrow([escrowId, "job_accept"], {
+      value: parseEther("0.5"),
+    });
+
+    const escrowAsOutsider = await viem.getContractAt(
+      "SmartJobsEscrow",
+      escrow.address,
+      { client: { wallet: outsider } },
+    );
+
+    await assert.rejects(
+      escrowAsOutsider.write.lockEscrow([
+        escrowId,
+        freelancer.account.address,
+        parseEther("0.5"),
       ]),
     );
   });
@@ -92,7 +125,12 @@ describe("SmartJobsEscrow", async function () {
     await escrow.write.createEscrow([escrowId, "job_dispute"], {
       value: parseEther("0.3"),
     });
-    await escrow.write.lockEscrow([
+    const escrowAsFreelancer = await viem.getContractAt(
+      "SmartJobsEscrow",
+      escrow.address,
+      { client: { wallet: freelancer } },
+    );
+    await escrowAsFreelancer.write.lockEscrow([
       escrowId,
       freelancer.account.address,
       parseEther("0.25"),
@@ -107,11 +145,6 @@ describe("SmartJobsEscrow", async function () {
       escrowAsOutsider.write.openDispute([escrowId, "Not my contract."]),
     );
 
-    const escrowAsFreelancer = await viem.getContractAt(
-      "SmartJobsEscrow",
-      escrow.address,
-      { client: { wallet: freelancer } },
-    );
     await escrowAsFreelancer.write.openDispute([escrowId, "Scope changed mid-job."]);
 
     const stored = await escrow.read.getEscrow([escrowId]);

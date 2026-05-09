@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { getAddress } from "viem";
 
 import type { ReviewResult } from "@/lib/review/schema";
+import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
 
 type FlowStep = "accepted" | "submitted" | "reviewed";
 
@@ -14,7 +16,26 @@ type StoredFile = {
   filename: string;
 };
 
-const jobId = "job_456";
+type JobRecord = {
+  job: {
+    id: string;
+    contractId: string;
+    title: string;
+    status: string;
+    budget: number;
+    requirements: string;
+    previewFile: StoredFile | null;
+    finalFile: StoredFile | null;
+    submittedSourceFiles: StoredFile[];
+    submissionNotes: string | null;
+  };
+  contract: {
+    id: string;
+    status: string;
+    freelancerWalletAddress: string | null;
+  };
+};
+
 const steps: Array<{ id: FlowStep; label: string }> = [
   { id: "accepted", label: "Job accepted" },
   { id: "submitted", label: "Work submitted" },
@@ -23,13 +44,18 @@ const steps: Array<{ id: FlowStep; label: string }> = [
 
 export function DeveloperSubmitWorkspace() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedJobId = searchParams.get("job")?.trim() ?? "";
+  const [record, setRecord] = useState<JobRecord | null>(null);
   const [completed, setCompleted] = useState<FlowStep[]>(["accepted"]);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Upload the finished work package.");
+  const [message, setMessage] = useState(
+    "Open an accepted job to upload the finished work package.",
+  );
   const [projectFiles, setProjectFiles] = useState<File[]>([]);
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
-  const [previewUrl, setPreviewUrl] = useState("https://demo.app/landing");
-  const [sourceUrl, setSourceUrl] = useState("https://github.com/demo/landing-source");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [workSummary, setWorkSummary] = useState(
     "Built the responsive landing page, connected the contact section, and included desktop/mobile screenshots.",
   );
@@ -37,13 +63,77 @@ export function DeveloperSubmitWorkspace() {
     "Clear brief, quick answers, smooth handoff.",
   );
   const [review, setReview] = useState<ReviewResult | null>(null);
-  const canSubmitWork = projectFiles.length > 0 && previewFiles.length > 0;
+  const canSubmitWork = !!record && projectFiles.length > 0 && previewFiles.length > 0;
   const progress = useMemo(
     () => Math.round((completed.length / steps.length) * 100),
     [completed.length],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRecord() {
+      if (!requestedJobId) {
+        setRecord(null);
+        setCompleted([]);
+        setMessage("Choose a specific funded job before opening the submission workspace.");
+        return;
+      }
+
+      setMessage("Loading accepted job...");
+
+      try {
+        const response = await fetch(`/jobs/${encodeURIComponent(requestedJobId)}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as JobRecord | { error?: string };
+
+        if (!response.ok || !("job" in payload)) {
+          throw new Error(
+            "error" in payload && payload.error ? payload.error : "Job not found.",
+          );
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setRecord(payload);
+        setPreviewUrl(payload.job.previewFile?.url ?? "");
+        setSourceUrl(
+          payload.job.submittedSourceFiles[0]?.url ??
+            payload.job.finalFile?.url ??
+            "",
+        );
+        setCompleted(getCompletedSteps(payload.job.status));
+        setMessage(
+          payload.contract.status === "locked" || payload.contract.status === "release_requested"
+            ? "Upload the finished work package."
+            : "This job must be accepted by a freelancer before submission.",
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setRecord(null);
+        setMessage(error instanceof Error ? error.message : "Could not load the job.");
+      }
+    }
+
+    void loadRecord();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedJobId]);
+
   async function submitWorkAndReview() {
+    if (!record) {
+      setMessage("Load an accepted job before submitting work.");
+      return;
+    }
+
     if (!canSubmitWork) {
       setMessage("Add project files and preview screenshots before submitting.");
       return;
@@ -53,13 +143,21 @@ export function DeveloperSubmitWorkspace() {
     setReview(null);
     setMessage("Submitting work package.");
 
-    const submittedSourceFiles = makeStoredFiles(projectFiles, "delivery");
-    const fallbackSource = makeUrlFile(jobId, "source", sourceUrl);
+    const jobId = record.job.id;
+    const contractId = record.contract.id;
+    const submittedSourceFiles = makeStoredFiles(projectFiles, jobId, "delivery");
     const sourceFiles = submittedSourceFiles.length > 0
       ? submittedSourceFiles
-      : [fallbackSource];
-    const previewFile = makeUrlFile(jobId, "preview", previewUrl);
-    const finalFile = sourceFiles[0] ?? fallbackSource;
+      : sourceUrl.trim()
+        ? [makeUrlFile(jobId, "source", sourceUrl)]
+        : [];
+    const previewAssets = makeStoredFiles(previewFiles, jobId, "preview");
+    const previewFile = previewUrl.trim()
+      ? makeUrlFile(jobId, "preview", previewUrl)
+      : previewAssets[0];
+    const finalFile = sourceUrl.trim()
+      ? makeUrlFile(jobId, "source", sourceUrl)
+      : sourceFiles[0];
 
     try {
       const submitResponse = await fetch(`/jobs/${jobId}/submit`, {
@@ -80,6 +178,10 @@ export function DeveloperSubmitWorkspace() {
         return;
       }
 
+      if (record.contract.status === "locked") {
+        await requestReleaseFromWallet(contractId, record.contract.freelancerWalletAddress);
+      }
+
       setCompleted((existing) =>
         existing.includes("submitted") ? existing : [...existing, "submitted"],
       );
@@ -87,11 +189,12 @@ export function DeveloperSubmitWorkspace() {
       window.localStorage.removeItem("smartjobs:last-ai-review");
       window.localStorage.removeItem("smartjobs:last-ai-review-error");
       window.localStorage.setItem("smartjobs:last-ai-review-status", "pending");
+      window.localStorage.setItem("smartjobs:last-ai-review-job-id", jobId);
       window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
 
       const reviewFormData = new FormData();
       reviewFormData.set("jobId", jobId);
-      reviewFormData.set("contractId", "contract_job_456");
+      reviewFormData.set("contractId", contractId);
 
       for (const file of projectFiles) {
         reviewFormData.append("sources", file);
@@ -101,7 +204,7 @@ export function DeveloperSubmitWorkspace() {
         reviewFormData.append("previews", file);
       }
 
-      router.push("/review/pending");
+      router.push(`/review/pending?job=${encodeURIComponent(jobId)}`);
 
       const reviewResponse = await fetch("/api/review", {
         method: "POST",
@@ -126,8 +229,24 @@ export function DeveloperSubmitWorkspace() {
       setReview(reviewPayload);
       window.localStorage.setItem("smartjobs:last-ai-review", JSON.stringify(reviewPayload));
       window.localStorage.setItem("smartjobs:last-ai-review-status", "ready");
+      window.localStorage.setItem("smartjobs:last-ai-review-job-id", jobId);
       window.dispatchEvent(new Event("smartjobs-ai-review-updated"));
-      setMessage("AI review is ready for the freelancer and client.");
+      setMessage("AI review is ready for the buyer.");
+      setRecord((current) =>
+        current
+          ? {
+              ...current,
+              job: {
+                ...current.job,
+                status: "ai_reviewed",
+              },
+              contract: {
+                ...current.contract,
+                status: "release_requested",
+              },
+            }
+          : current,
+      );
     } finally {
       setBusy(false);
     }
@@ -160,13 +279,22 @@ export function DeveloperSubmitWorkspace() {
               Freelancer delivery
             </p>
             <h1 className="mt-2 max-w-[620px] text-3xl font-black leading-tight sm:text-4xl">
-              Submit finished work
+              {record?.job.title ?? "Submit finished work"}
             </h1>
+            {record && (
+              <p className="mt-3 max-w-[620px] text-[14px] leading-6 text-[var(--text-secondary)]">
+                {record.job.requirements}
+              </p>
+            )}
           </div>
           <div className="rounded-[14px] bg-[var(--text-primary)] px-4 py-3 text-[var(--background)]">
             <p className="text-[11px] font-black uppercase opacity-60">Escrow</p>
-            <p className="mt-1 text-xl font-black leading-none">250 ETH</p>
-            <p className="mt-2 text-[11px] font-black uppercase opacity-70">Locked</p>
+            <p className="mt-1 text-xl font-black leading-none">
+              {record ? `${record.job.budget} ETH` : "..."}
+            </p>
+            <p className="mt-2 text-[11px] font-black uppercase opacity-70">
+              {record?.contract.status.replaceAll("_", " ") ?? "loading"}
+            </p>
           </div>
         </div>
 
@@ -230,7 +358,7 @@ export function DeveloperSubmitWorkspace() {
 
           <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Project files
+              Source URL
             </span>
             <input
               className="h-10 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[14px] font-bold outline-none"
@@ -254,17 +382,14 @@ export function DeveloperSubmitWorkspace() {
             <span className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-3">
                 <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--text-primary)] text-[12px] font-black text-[var(--background)]">
-                  OL
+                  CL
                 </span>
                 <span>
-                  <span className="block text-[13px] font-black">Orbit Labs</span>
+                  <span className="block text-[13px] font-black">Buyer context</span>
                   <span className="block text-[11px] font-black uppercase text-[var(--text-muted)]">
-                    Client review
+                    Handoff notes
                   </span>
                 </span>
-              </span>
-              <span className="text-[13px] font-black text-[var(--text-primary)]">
-                5.0
               </span>
             </span>
             <textarea
@@ -285,14 +410,12 @@ export function DeveloperSubmitWorkspace() {
             {busy ? "Submitting to AI" : "Submit to AI review"}
           </button>
 
-          {review && (
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
-              href="/review"
-            >
-              View shared review
-            </Link>
-          )}
+          <Link
+            className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+            href={record ? `/review?job=${encodeURIComponent(record.job.id)}` : "/review"}
+          >
+            View buyer review
+          </Link>
         </div>
       </article>
 
@@ -395,10 +518,109 @@ export function DeveloperSubmitWorkspace() {
   );
 }
 
-function makeStoredFiles(files: File[], role: string): StoredFile[] {
+async function requestReleaseFromWallet(
+  contractId: string,
+  freelancerWalletAddress: string | null,
+) {
+  const provider = getEthereumProvider();
+
+  if (!provider) {
+    throw new Error("Connect the freelancer wallet to request payout.");
+  }
+
+  const accounts = await provider.request<string[]>({
+    method: "eth_requestAccounts",
+  });
+  const from = accounts[0];
+
+  if (!from) {
+    throw new Error("No wallet account selected.");
+  }
+
+  if (
+    freelancerWalletAddress &&
+    getAddress(from) !== getAddress(freelancerWalletAddress)
+  ) {
+    throw new Error(
+      `Connect the locked freelancer wallet (${freelancerWalletAddress}) before requesting payout.`,
+    );
+  }
+
+  await ensureSepoliaNetwork(provider);
+
+  const prepared = await postJson(`/escrow-contracts/${contractId}/onchain/prepare`, {
+    action: "request_release",
+  });
+
+  if (!isPreparedTransaction(prepared)) {
+    throw new Error("Escrow release request could not be prepared.");
+  }
+
+  const transactionHash = await provider.request<string>({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from,
+        to: prepared.transaction.to,
+        value: prepared.transaction.value ?? "0x0",
+        data: prepared.transaction.data,
+      },
+    ],
+  });
+
+  await postJson(`/escrow-contracts/${contractId}/onchain/confirm`, {
+    action: "request_release",
+    transactionHash,
+  });
+}
+
+async function postJson(url: string, body: Record<string, unknown>) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as { error?: string };
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Request failed.");
+  }
+
+  return payload;
+}
+
+function isPreparedTransaction(value: unknown): value is {
+  transaction: { to: string; value?: string; data: string };
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "transaction" in value &&
+    typeof (value as { transaction?: { to?: unknown; data?: unknown } }).transaction?.to ===
+      "string" &&
+    typeof (value as { transaction?: { to?: unknown; data?: unknown } }).transaction
+      ?.data === "string"
+  );
+}
+
+function getCompletedSteps(jobStatus: string): FlowStep[] {
+  if (jobStatus === "ai_reviewed" || jobStatus === "completed") {
+    return ["accepted", "submitted", "reviewed"];
+  }
+
+  if (jobStatus === "submitted") {
+    return ["accepted", "submitted"];
+  }
+
+  return ["accepted"];
+}
+
+function makeStoredFiles(files: File[], jobId: string, role: string): StoredFile[] {
   return files.map((file, index) => ({
     id: `file_${role}_${jobId}_${index + 1}`,
-    url: `local-demo://${encodeURIComponent(file.name)}`,
+    url: `smartjobs-upload://${encodeURIComponent(file.name)}`,
     filename: file.name,
   }));
 }
@@ -409,7 +631,7 @@ function makeUrlFile(job: string, role: string, url: string): StoredFile {
 
   return {
     id: `file_${role}_${job}`,
-    url: trimmed || `local-demo://${role}`,
+    url: trimmed || `smartjobs-reference://${encodeURIComponent(job)}/${role}`,
     filename,
   };
 }
@@ -420,7 +642,7 @@ function makeSubmissionNotes(workSummary: string, collaborationReview: string) {
 
   return [
     summary ? `Work completed: ${summary}` : null,
-    collaboration ? `Client collaboration: ${collaboration}` : null,
+    collaboration ? `Buyer collaboration: ${collaboration}` : null,
   ]
     .filter(Boolean)
     .join("\n");

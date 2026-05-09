@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { beforeEach, describe, test } from "node:test";
 
-import { resetDummyStoreForTests, submitDummyJob } from "@/lib/workflow/dummy-endpoints";
+import {
+  getDummyJobWithContract,
+  resetDummyStoreForTests,
+  submitDummyJob,
+} from "@/lib/workflow/dummy-endpoints";
 import type { ReviewInputFile, ReviewResult } from "../lib/review/schema";
 
 type RunBatchReviewArgs = {
@@ -128,6 +132,11 @@ describe("review API route", () => {
     assert.match(mockReviewCalls[0].description, /Dispute reason: None/);
     assert.equal(mockReviewCalls[0].sourceFiles.length, 1);
     assert.equal(mockReviewCalls[0].previewFiles.length, 1);
+
+    const updated = getDummyJobWithContract("job_456");
+    assert.equal(updated?.job.status, "ai_reviewed");
+    assert.equal(updated?.job.aiReview?.verdict, "pass");
+    assert.equal(updated?.job.aiReview?.summary, "Mock route review passed.");
   });
 
   test("rejects missing review identifiers", async () => {

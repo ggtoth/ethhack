@@ -9,13 +9,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const navItems = [
   { href: "/", label: "Start" },
   { href: "/wallet", label: "Wallet" },
-  { href: "/messages", label: "Inbox", kind: "inbox" },
   { href: "/post-job", label: "Create" },
-  { href: "/browse-jobs", label: "Freelancer start" },
-  { href: "/submit-work", label: "Submit" },
-  { href: "/ai-review", label: "Review" },
-  { href: "/profile?view=customer", label: "Customer" },
-  { href: "/profile?view=freelancer", label: "Freelancer" },
+  { href: "/browse-jobs", label: "Browse jobs" },
+  { href: "/my-jobs", label: "My jobs" },
 ];
 
 export function AppNavbar() {
@@ -59,7 +55,6 @@ export function AppNavbar() {
                 key={item.href}
               >
                 <span>{item.label}</span>
-                {item.kind === "inbox" && <InboxIndicator />}
               </Link>
             );
           })}
@@ -97,7 +92,6 @@ export function AppNavbar() {
                   onClick={() => setOpen(false)}
                 >
                   <span>{item.label}</span>
-                  {item.kind === "inbox" && <InboxIndicator />}
                 </Link>
               );
             })}
@@ -105,15 +99,6 @@ export function AppNavbar() {
         </div>
       )}
     </header>
-  );
-}
-
-function InboxIndicator() {
-  return (
-    <span className="relative grid h-7 w-7 place-items-center rounded-full bg-[#f45b63] text-[12px] font-black text-white">
-      B
-      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--background)] bg-[#20c878]" />
-    </span>
   );
 }
 

@@ -115,14 +115,18 @@ contract SmartJobsEscrow {
         bytes32 escrowId,
         address payable freelancer,
         uint256 bidAmount
-    ) external existingEscrow(escrowId) onlyClient(escrowId) {
+    ) external existingEscrow(escrowId) {
         Escrow storage escrow = escrows[escrowId];
 
         if (escrow.status != EscrowStatus.Funded) {
             revert InvalidStatus(escrow.status);
         }
 
-        if (freelancer == address(0) || freelancer == escrow.client) {
+        if (
+            freelancer == address(0) ||
+            freelancer == escrow.client ||
+            freelancer != msg.sender
+        ) {
             revert InvalidFreelancer();
         }
 
