@@ -12,10 +12,31 @@ const reviewedJob = jobs.find((job) => job.id === "landing-page-implementation")
 export default function ReviewPage() {
   const searchParams = useSearchParams();
   const variant = searchParams.get("case") ?? undefined;
+  const startsPending = searchParams.get("pending") === "1";
   const [liveReview, setLiveReview] = useState<ReviewResult | null>(null);
-  const displayInput = liveReview ? reviewResultToDisplayInput(liveReview) : getDemoInput(variant);
+  const [reviewStatus, setReviewStatus] = useState<"idle" | "pending" | "ready" | "error">(
+    startsPending ? "pending" : "idle",
+  );
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const isPending = reviewStatus === "pending" && !liveReview;
+  const isError = reviewStatus === "error" && !liveReview;
+  const displayInput = liveReview
+    ? reviewResultToDisplayInput(liveReview)
+    : isPending || isError
+      ? {
+          score: isError ? 22 : 0,
+          confidence: isError ? 31 : 0,
+          hasSuspiciousInput: isError,
+        }
+      : getDemoInput(variant);
   const display = getReviewDisplay(displayInput);
-  const summary = liveReview?.user_visible.summary ?? display.summary;
+  const summary = liveReview?.user_visible.summary ?? (
+    isError
+      ? reviewError ?? "The AI review failed."
+      : isPending
+        ? "AI review is running. The result will appear here automatically."
+        : display.summary
+  );
   const manifest = [
     "SmartJobs delivery files",
     `Project: ${reviewedJob.title}`,
@@ -30,105 +51,170 @@ export default function ReviewPage() {
   } as CSSProperties;
 
   useEffect(() => {
-    const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
+    let intervalId: number | null = null;
+    let shouldPoll = startsPending;
 
-    if (!storedReview) {
-      return;
-    }
+    function loadStoredReview() {
+      const status = window.localStorage.getItem("smartjobs:last-ai-review-status");
+      const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
 
-    try {
-      const parsed = JSON.parse(storedReview) as unknown;
-
-      if (isReviewResult(parsed)) {
-        setLiveReview(parsed);
+      if (status === "pending") {
+        shouldPoll = true;
+        setLiveReview(null);
+        setReviewStatus("pending");
+        return false;
       }
-    } catch {
-      setLiveReview(null);
+
+      if (status === "error") {
+        setReviewStatus("error");
+        setReviewError(
+          window.localStorage.getItem("smartjobs:last-ai-review-error") ??
+            "The AI review failed.",
+        );
+        return true;
+      }
+
+      if (!storedReview) {
+        setReviewStatus(startsPending ? "pending" : "idle");
+        return false;
+      }
+
+      try {
+        const parsed = JSON.parse(storedReview) as unknown;
+
+        if (isReviewResult(parsed)) {
+          setLiveReview(parsed);
+          setReviewStatus("ready");
+          return true;
+        }
+      } catch {
+        setLiveReview(null);
+      }
+
+      return false;
     }
-  }, []);
+
+    const loaded = loadStoredReview();
+
+    if (!loaded && shouldPoll) {
+      intervalId = window.setInterval(() => {
+        if (loadStoredReview() && intervalId) {
+          window.clearInterval(intervalId);
+        }
+      }, 800);
+    }
+
+    function handleReviewUpdate() {
+      if (loadStoredReview() && intervalId) {
+        window.clearInterval(intervalId);
+      }
+    }
+
+    window.addEventListener("smartjobs-ai-review-updated", handleReviewUpdate);
+    window.addEventListener("storage", handleReviewUpdate);
+
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+
+      window.removeEventListener("smartjobs-ai-review-updated", handleReviewUpdate);
+      window.removeEventListener("storage", handleReviewUpdate);
+    };
+  }, [startsPending]);
 
   return (
     <main className="relative flex flex-1 items-center overflow-hidden bg-[var(--background)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">
-      {display.zone === "good" && <Confetti />}
+      {display.zone === "good" && !isPending && !isError && <Confetti />}
 
       <section className="mx-auto grid w-full max-w-[620px] gap-5">
         <div
+          aria-busy={isPending}
           className="review-shell relative overflow-hidden rounded-[18px] p-6 text-center sm:p-10"
           style={zoneStyle}
         >
-          <div className="review-aura" aria-hidden="true" />
-
-          <div className="approval-burst mx-auto grid h-28 w-28 place-items-center rounded-full bg-[var(--review-zone-bg)]">
-            <div className={`review-face review-face--${display.face}`} aria-hidden="true">
-              <span />
+          {isPending && (
+            <div className="review-loading" aria-live="polite">
+              <span className="review-spinner" aria-hidden="true" />
+              <p className="text-[13px] font-black uppercase">AI review running</p>
             </div>
-          </div>
-
-          <p className="mt-6 text-[12px] font-bold uppercase text-[var(--text-muted)]">
-            AI recommends
-          </p>
-          <h1 className="rating-title mt-2 text-4xl font-black uppercase leading-tight text-[var(--review-zone)] sm:text-5xl">
-            {display.rating}
-          </h1>
-          <div className="approval-chip mx-auto mt-4 w-fit rounded-full bg-[var(--review-zone-bg)] px-5 py-2 text-[13px] font-black text-[var(--review-zone)]">
-            {display.recommendation}
-          </div>
-
-          <div className="score-stage mx-auto mt-8 max-w-[500px] px-3 py-5">
-            <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">
-              Score
-            </p>
-            <p className="mt-1 text-6xl font-black leading-none text-[var(--text-primary)] sm:text-7xl">
-              {display.score}
-              <span className="text-2xl text-[var(--text-secondary)]"> /100</span>
-            </p>
-
-            <div className="confidence-pill mx-auto mt-5 w-fit rounded-full bg-[var(--review-zone-bg)] px-4 py-2 text-[13px] font-black text-[var(--review-zone)]">
-              AI confidence: {display.confidence}/100
-            </div>
-
-            <div className="zone-meter mt-7">
-              <div
-                className="zone-marker"
-                style={{ left: `${display.confidence}%` }}
-                aria-hidden="true"
-              >
-                <span>{display.confidence}</span>
-              </div>
-              <div
-                className="zone-fill"
-                style={{ width: `${display.confidence}%` }}
-                aria-hidden="true"
-              />
-            </div>
-            <div className="mt-3 grid grid-cols-3 text-[10px] font-black uppercase">
-              <span className="text-left text-[#ef4444]">Bad</span>
-              <span className="text-[#eab308]">Medium</span>
-              <span className="text-right text-[#43c084]">Good</span>
-            </div>
-          </div>
-
-          <p className="mx-auto mt-5 max-w-[340px] text-[14px] leading-6 text-[var(--text-secondary)]">
-            {summary}
-          </p>
-
-          {display.canDownload ? (
-            <a
-              className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-[8px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] sm:w-auto sm:min-w-[220px]"
-              download="smartjobs-delivery-files.txt"
-              href={`data:text/plain;charset=utf-8,${encodeURIComponent(manifest)}`}
-            >
-              Download files
-            </a>
-          ) : (
-            <button
-              className="mt-7 inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 text-center text-[14px] font-black text-[var(--text-muted)] sm:w-auto sm:min-w-[220px]"
-              disabled
-              type="button"
-            >
-              Download blocked
-            </button>
           )}
+
+          <div className={isPending ? "review-content review-content--pending" : "review-content"}>
+            <div className="review-aura" aria-hidden="true" />
+
+            <div className="approval-burst mx-auto grid h-28 w-28 place-items-center rounded-full bg-[var(--review-zone-bg)]">
+              <div className={`review-face review-face--${display.face}`} aria-hidden="true">
+                <span />
+              </div>
+            </div>
+
+            <p className="mt-6 text-[12px] font-bold uppercase text-[var(--text-muted)]">
+              AI recommends
+            </p>
+            <h1 className="rating-title mt-2 text-4xl font-black uppercase leading-tight text-[var(--review-zone)] sm:text-5xl">
+              {display.rating}
+            </h1>
+            <div className="approval-chip mx-auto mt-4 w-fit rounded-full bg-[var(--review-zone-bg)] px-5 py-2 text-[13px] font-black text-[var(--review-zone)]">
+              {display.recommendation}
+            </div>
+
+            <div className="score-stage mx-auto mt-8 max-w-[500px] px-3 py-5">
+              <p className="text-[12px] font-bold uppercase text-[var(--text-muted)]">
+                Score
+              </p>
+              <p className="mt-1 text-6xl font-black leading-none text-[var(--text-primary)] sm:text-7xl">
+                {display.score}
+                <span className="text-2xl text-[var(--text-secondary)]"> /100</span>
+              </p>
+
+              <div className="confidence-pill mx-auto mt-5 w-fit rounded-full bg-[var(--review-zone-bg)] px-4 py-2 text-[13px] font-black text-[var(--review-zone)]">
+                AI confidence: {display.confidence}/100
+              </div>
+
+              <div className="zone-meter mt-7">
+                <div
+                  className="zone-marker"
+                  style={{ left: `${display.confidence}%` }}
+                  aria-hidden="true"
+                >
+                  <span>{display.confidence}</span>
+                </div>
+                <div
+                  className="zone-fill"
+                  style={{ width: `${display.confidence}%` }}
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-3 text-[10px] font-black uppercase">
+                <span className="text-left text-[#ef4444]">Bad</span>
+                <span className="text-[#eab308]">Medium</span>
+                <span className="text-right text-[#43c084]">Good</span>
+              </div>
+            </div>
+
+            <p className="mx-auto mt-5 max-w-[340px] text-[14px] leading-6 text-[var(--text-secondary)]">
+              {reviewStatus === "error" ? reviewError : summary}
+            </p>
+
+            {display.canDownload && !isPending && !isError ? (
+              <a
+                className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-[8px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] sm:w-auto sm:min-w-[220px]"
+                download="smartjobs-delivery-files.txt"
+                href={`data:text/plain;charset=utf-8,${encodeURIComponent(manifest)}`}
+              >
+                Download files
+              </a>
+            ) : (
+              <button
+                className="mt-7 inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 text-center text-[14px] font-black text-[var(--text-muted)] sm:w-auto sm:min-w-[220px]"
+                disabled
+                type="button"
+              >
+                {isPending ? "Waiting for AI" : isError ? "AI review failed" : "Download blocked"}
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -151,6 +237,40 @@ export default function ReviewPage() {
           box-shadow:
             0 34px 90px rgba(0, 0, 0, 0.26),
             inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .review-content {
+          transition:
+            filter 260ms ease,
+            opacity 260ms ease;
+        }
+
+        .review-content--pending {
+          filter: blur(10px);
+          opacity: 0.44;
+          pointer-events: none;
+          user-select: none;
+        }
+
+        .review-loading {
+          position: absolute;
+          inset: 0;
+          z-index: 10;
+          display: grid;
+          place-items: center;
+          align-content: center;
+          gap: 12px;
+          background: color-mix(in srgb, var(--background) 18%, transparent);
+          backdrop-filter: blur(2px);
+        }
+
+        .review-spinner {
+          width: 42px;
+          height: 42px;
+          border-radius: 999px;
+          border: 4px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+          border-top-color: var(--text-primary);
+          animation: review-spin 780ms linear infinite;
         }
 
         .review-aura {
@@ -455,6 +575,12 @@ export default function ReviewPage() {
           100% {
             opacity: 0;
             transform: translate3d(var(--confetti-drift), 360px, 0) rotate(520deg);
+          }
+        }
+
+        @keyframes review-spin {
+          to {
+            transform: rotate(360deg);
           }
         }
       `}</style>
