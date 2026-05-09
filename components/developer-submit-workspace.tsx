@@ -112,6 +112,7 @@ export function DeveloperSubmitWorkspace() {
         existing.includes("reviewed") ? existing : [...existing, "reviewed"],
       );
       setReview(reviewPayload);
+      window.localStorage.setItem("smartjobs:last-ai-review", JSON.stringify(reviewPayload));
       setMessage("AI review is ready for the freelancer and client.");
     } finally {
       setBusy(false);

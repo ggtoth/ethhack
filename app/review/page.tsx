@@ -1,18 +1,21 @@
-import type { CSSProperties } from "react";
+"use client";
+
+import { useEffect, useState, type CSSProperties } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { aiReview, jobs } from "@/lib/marketplace-data";
 import { getReviewDisplay } from "@/lib/review/display";
+import type { ReviewResult } from "@/lib/review/schema";
 
 const reviewedJob = jobs.find((job) => job.id === "landing-page-implementation") ?? jobs[0];
 
-type ReviewPageProps = {
-  searchParams?: Promise<{ case?: string | string[] }>;
-};
-
-export default async function ReviewPage({ searchParams }: ReviewPageProps) {
-  const params = (await searchParams) ?? {};
-  const variant = Array.isArray(params.case) ? params.case[0] : params.case;
-  const display = getReviewDisplay(getDemoInput(variant));
+export default function ReviewPage() {
+  const searchParams = useSearchParams();
+  const variant = searchParams.get("case") ?? undefined;
+  const [liveReview, setLiveReview] = useState<ReviewResult | null>(null);
+  const displayInput = liveReview ? reviewResultToDisplayInput(liveReview) : getDemoInput(variant);
+  const display = getReviewDisplay(displayInput);
+  const summary = liveReview?.user_visible.summary ?? display.summary;
   const manifest = [
     "SmartJobs delivery files",
     `Project: ${reviewedJob.title}`,
@@ -25,6 +28,24 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
     "--review-zone": display.color,
     "--review-zone-bg": display.background,
   } as CSSProperties;
+
+  useEffect(() => {
+    const storedReview = window.localStorage.getItem("smartjobs:last-ai-review");
+
+    if (!storedReview) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedReview) as unknown;
+
+      if (isReviewResult(parsed)) {
+        setLiveReview(parsed);
+      }
+    } catch {
+      setLiveReview(null);
+    }
+  }, []);
 
   return (
     <main className="relative flex flex-1 items-center overflow-hidden bg-[var(--background)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">
@@ -88,7 +109,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
           </div>
 
           <p className="mx-auto mt-5 max-w-[340px] text-[14px] leading-6 text-[var(--text-secondary)]">
-            {display.summary}
+            {summary}
           </p>
 
           {display.canDownload ? (
@@ -461,6 +482,64 @@ function getDemoInput(variant: string | undefined) {
     score: aiReview.score,
     confidence: 94,
   };
+}
+
+function reviewResultToDisplayInput(review: ReviewResult) {
+  return {
+    score: getReviewScore(review),
+    confidence: confidenceToScore(review.comparison_notes.confidence),
+    hasSuspiciousInput: hasBadEvidence(review),
+  };
+}
+
+function getReviewScore(review: ReviewResult) {
+  const scores = [
+    verdictToScore(review.verdicts.preview_vs_source.verdict),
+    verdictToScore(review.verdicts.preview_vs_description.verdict),
+    verdictToScore(review.verdicts.source_vs_description.verdict),
+  ];
+
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+}
+
+function verdictToScore(verdict: ReviewResult["verdicts"]["preview_vs_source"]["verdict"]) {
+  switch (verdict) {
+    case "MATCH":
+      return 94;
+    case "PARTIAL_MATCH":
+      return 72;
+    case "MISMATCH":
+      return 32;
+    case "INSUFFICIENT_EVIDENCE":
+      return 45;
+  }
+}
+
+function confidenceToScore(confidence: ReviewResult["comparison_notes"]["confidence"]) {
+  if (confidence === "HIGH") {
+    return 94;
+  }
+
+  if (confidence === "MEDIUM") {
+    return 72;
+  }
+
+  return 42;
+}
+
+function hasBadEvidence(review: ReviewResult) {
+  return Object.values(review.verdicts).some((verdict) => verdict.verdict === "MISMATCH");
+}
+
+function isReviewResult(value: unknown): value is ReviewResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "schema_version" in value &&
+    "verdicts" in value &&
+    "comparison_notes" in value &&
+    "user_visible" in value
+  );
 }
 
 function Confetti() {
