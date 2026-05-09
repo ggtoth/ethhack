@@ -1,45 +1,85 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState, type ChangeEvent } from "react";
 
-type FlowStep = "accepted" | "submitted" | "reviewed" | "paid";
+type FlowStep = "accepted" | "submitted" | "reviewed";
+
+type AiReviewPayload = {
+  aiReview?: {
+    verdict: "pass" | "needs_revision" | "fail";
+    score: number;
+    summary: string;
+    issues: string[];
+  };
+  message?: string;
+  error?: string;
+};
+
+type StoredFile = {
+  id: string;
+  url: string;
+  filename: string;
+};
 
 const jobId = "job_456";
 const steps: Array<{ id: FlowStep; label: string }> = [
-  { id: "accepted", label: "Accept job" },
-  { id: "submitted", label: "Submit work" },
-  { id: "reviewed", label: "AI approved" },
-  { id: "paid", label: "Wallet paid" },
+  { id: "accepted", label: "Job accepted" },
+  { id: "submitted", label: "Work submitted" },
+  { id: "reviewed", label: "AI reviewed" },
 ];
 
 export function DeveloperSubmitWorkspace() {
-  const router = useRouter();
   const [completed, setCompleted] = useState<FlowStep[]>(["accepted"]);
-  const [busy, setBusy] = useState<FlowStep | null>(null);
-  const [message, setMessage] = useState("Job accepted. Escrow is locked and ready.");
-  const [deliveryFile, setDeliveryFile] = useState<File | null>(null);
-  const currentStep = completed[completed.length - 1];
-  const canOpenReview = completed.includes("reviewed");
-  const canSubmitWork = deliveryFile !== null;
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("Upload the finished work package.");
+  const [deliveryFiles, setDeliveryFiles] = useState<File[]>([]);
+  const [previewUrl, setPreviewUrl] = useState("https://demo.app/landing");
+  const [sourceUrl, setSourceUrl] = useState("https://github.com/demo/landing-source");
+  const [notes, setNotes] = useState(
+    "Responsive landing page completed. Source, preview, and screenshots are included.",
+  );
+  const [review, setReview] = useState<AiReviewPayload["aiReview"] | null>(null);
+  const canSubmitWork = deliveryFiles.length > 0 && previewUrl.trim().length > 0;
   const progress = useMemo(
     () => Math.round((completed.length / steps.length) * 100),
     [completed.length],
   );
 
   async function submitWorkAndReview() {
-    setBusy("submitted");
+    if (!canSubmitWork) {
+      setMessage("Add delivery files and a preview URL before submitting.");
+      return;
+    }
+
+    setBusy(true);
+    setReview(null);
+    setMessage("Submitting work package.");
+
+    const submittedSourceFiles = makeStoredFiles(deliveryFiles, "delivery");
+    const fallbackSource = makeUrlFile(jobId, "source", sourceUrl);
+    const sourceFiles = submittedSourceFiles.length > 0
+      ? submittedSourceFiles
+      : [fallbackSource];
+    const previewFile = makeUrlFile(jobId, "preview", previewUrl);
+    const finalFile = sourceFiles[0] ?? fallbackSource;
 
     try {
-      const submitResponse = await fetch(`/jobs/${jobId}/submit`, { method: "POST" });
-      const submitPayload = (await submitResponse.json()) as {
-        message?: string;
-        error?: string;
-      };
+      const submitResponse = await fetch(`/jobs/${jobId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          previewFile,
+          finalFile,
+          submittedSourceFiles: sourceFiles,
+          submissionNotes: notes.trim() || null,
+          requestReleaseOnChain: false,
+        }),
+      });
+      const submitPayload = (await submitResponse.json()) as { error?: string };
 
       if (!submitResponse.ok) {
-        setMessage(submitPayload.error ?? "The demo submit failed.");
+        setMessage(submitPayload.error ?? "The work package could not be submitted.");
         return;
       }
 
@@ -47,15 +87,11 @@ export function DeveloperSubmitWorkspace() {
         existing.includes("submitted") ? existing : [...existing, "submitted"],
       );
       setMessage("Work submitted. AI review is running.");
-      setBusy("reviewed");
 
       const reviewResponse = await fetch(`/jobs/${jobId}/request-ai-review`, {
         method: "POST",
       });
-      const reviewPayload = (await reviewResponse.json()) as {
-        message?: string;
-        error?: string;
-      };
+      const reviewPayload = (await reviewResponse.json()) as AiReviewPayload;
 
       if (!reviewResponse.ok) {
         setMessage(reviewPayload.error ?? "The AI review failed.");
@@ -65,129 +101,142 @@ export function DeveloperSubmitWorkspace() {
       setCompleted((existing) =>
         existing.includes("reviewed") ? existing : [...existing, "reviewed"],
       );
-      setCompleted((existing) =>
-        existing.includes("paid") ? existing : [...existing, "paid"],
-      );
-      setMessage(reviewPayload.message ?? "AI approved the work. Redirecting to wallet.");
-      window.setTimeout(() => {
-        router.push("/profile?view=freelancer&payout=success");
-      }, 700);
-      return;
+      setReview(reviewPayload.aiReview ?? null);
+      setMessage("AI review is ready for the freelancer and client.");
     } finally {
-      if (busy !== "paid") {
-        setBusy(null);
-      }
+      setBusy(false);
     }
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    setDeliveryFile(file);
+    const files = Array.from(event.target.files ?? []);
+    setDeliveryFiles(files);
 
-    if (file) {
-      setMessage(`${file.name} selected. Delivery is ready to submit.`);
+    if (files.length > 0) {
+      setMessage(`${files.length} file${files.length === 1 ? "" : "s"} selected.`);
     }
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-[1060px] gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
-      <article className="developer-panel rounded-[18px] p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+    <section className="mx-auto grid w-full max-w-[980px] gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <article className="delivery-panel rounded-[16px] p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[12px] font-black uppercase text-[#168a55]">
-              Developer workspace
+            <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
+              Freelancer delivery
             </p>
-            <h1 className="mt-3 max-w-[640px] text-4xl font-black leading-tight sm:text-5xl">
-              Submit the finished project for AI review
+            <h1 className="mt-2 max-w-[620px] text-3xl font-black leading-tight sm:text-4xl">
+              Submit finished work
             </h1>
-            <p className="mt-4 max-w-[620px] text-[15px] leading-7 text-[var(--text-secondary)]">
-              This is the freelancer/developer demo view. Upload the completed work,
-              then submit it so the AI can analyze the delivery.
-            </p>
           </div>
-          <div className="rounded-[16px] bg-[var(--text-primary)] px-5 py-4 text-[var(--background)] shadow-[0_22px_48px_rgba(15,23,42,0.16)]">
+          <div className="rounded-[14px] bg-[var(--text-primary)] px-4 py-3 text-[var(--background)]">
             <p className="text-[11px] font-black uppercase opacity-60">Escrow</p>
-            <p className="mt-1 text-2xl font-black leading-none">250 ETH</p>
+            <p className="mt-1 text-xl font-black leading-none">250 ETH</p>
+            <p className="mt-2 text-[11px] font-black uppercase opacity-70">Locked</p>
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4">
-          <label className="delivery-drop grid cursor-pointer gap-3 rounded-[16px] p-5">
+        <div className="mt-5 grid gap-3">
+          <label className="delivery-drop grid cursor-pointer gap-2 rounded-[14px] p-4">
             <input
               accept=".zip,.rar,.7z,.pdf,.png,.jpg,.jpeg,.webp,.fig,.txt,.md,.tsx,.ts,.js,.css"
               className="sr-only"
+              multiple
               type="file"
               onChange={handleFileChange}
             />
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Delivery file
+              Delivery files
             </span>
-            <span className="text-[20px] font-black text-[var(--text-primary)]">
-              {deliveryFile ? deliveryFile.name : "Upload completed work"}
+            <span className="text-[18px] font-black text-[var(--text-primary)]">
+              {deliveryFiles.length > 0
+                ? `${deliveryFiles.length} file${deliveryFiles.length === 1 ? "" : "s"} ready`
+                : "Upload files"}
             </span>
-            <span className="text-[13px] leading-6 text-[var(--text-secondary)]">
-              {deliveryFile
-                ? `${formatFileSize(deliveryFile.size)} selected`
-                : "Add the final ZIP, source package, screenshot, PDF, or project export."}
-            </span>
+            {deliveryFiles.length > 0 && (
+              <span className="text-[13px] leading-5 text-[var(--text-secondary)]">
+                {deliveryFiles.map((file) => file.name).join(", ")}
+              </span>
+            )}
           </label>
-          <DeliveryField label="Preview URL" value="https://demo.app/landing" />
-          <div className="rounded-[14px] bg-white/50 p-4 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
-            <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+
+          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
+            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+              Preview URL
+            </span>
+            <input
+              className="h-10 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[14px] font-bold outline-none"
+              value={previewUrl}
+              onChange={(event) => setPreviewUrl(event.target.value)}
+            />
+          </label>
+
+          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
+            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+              Source URL
+            </span>
+            <input
+              className="h-10 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[14px] font-bold outline-none"
+              value={sourceUrl}
+              onChange={(event) => setSourceUrl(event.target.value)}
+            />
+          </label>
+
+          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
+            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
               Notes
-            </p>
-            <p className="mt-2 text-[14px] leading-6 text-[var(--text-primary)]">
-              Responsive landing page completed. Final source, preview, and screenshots are
-              ready for AI comparison.
-            </p>
-          </div>
+            </span>
+            <textarea
+              className="min-h-20 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[14px] leading-6 outline-none"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
+          </label>
         </div>
 
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button
-            className="inline-flex h-12 items-center justify-center rounded-[12px] bg-[#1dbf73] px-6 text-[14px] font-black text-white transition hover:bg-[#18a864] disabled:cursor-not-allowed disabled:opacity-55"
-            disabled={
-              busy !== null ||
-              !canSubmitWork ||
-              completed.includes("submitted")
-            }
+            className="inline-flex h-11 items-center justify-center rounded-[11px] bg-[var(--button)] px-6 text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-55"
+            disabled={busy || !canSubmitWork}
             type="button"
             onClick={submitWorkAndReview}
           >
-            {busy === "submitted"
-              ? "Submitting"
-              : busy === "reviewed"
-                ? "Running AI review"
-                : "Submit work"}
+            {busy ? "Submitting to AI" : "Submit to AI review"}
           </button>
+
+          {review && (
+            <Link
+              className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+              href="/review"
+            >
+              View shared review
+            </Link>
+          )}
         </div>
       </article>
 
-      <aside className="developer-panel rounded-[18px] p-6">
+      <aside className="delivery-panel rounded-[16px] p-5">
         <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
-          Demo flow
+          Status
         </p>
-        <div className="mt-5 h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]">
           <div
-            className="h-full rounded-full bg-[#1dbf73] transition-all"
+            className="h-full rounded-full bg-[var(--text-primary)] transition-all"
             style={{ width: `${progress}%` }}
           />
         </div>
 
-        <div className="mt-6 grid gap-4">
+        <div className="mt-5 grid gap-3">
           {steps.map((step, index) => {
             const done = completed.includes(step.id);
-            const active = currentStep === step.id;
 
             return (
               <div className="flex items-center gap-3" key={step.id}>
                 <span
                   className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-black ${
                     done
-                      ? "bg-[#1dbf73] text-white"
-                      : active
-                        ? "bg-[#f7b500] text-white"
-                        : "bg-[var(--surface-strong)] text-[var(--text-muted)]"
+                      ? "bg-[var(--text-primary)] text-[var(--background)]"
+                      : "bg-[var(--surface-strong)] text-[var(--text-muted)]"
                   }`}
                 >
                   {index + 1}
@@ -203,94 +252,83 @@ export function DeveloperSubmitWorkspace() {
           })}
         </div>
 
-        <p className="mt-6 rounded-[14px] bg-white/50 p-4 text-[13px] leading-6 text-[var(--text-secondary)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
+        <p className="mt-5 rounded-[12px] bg-[var(--surface-strong)] p-3 text-[13px] leading-5 text-[var(--text-secondary)]">
           {message}
         </p>
 
-        <Link
-          className={`mt-5 inline-flex h-12 w-full items-center justify-center rounded-[12px] px-5 text-[14px] font-black ${
-            canOpenReview
-              ? "bg-[var(--button)] text-[var(--button-text)]"
-              : "pointer-events-none bg-[var(--surface-strong)] text-[var(--text-muted)]"
-          }`}
-          href="/review"
-        >
-          Open user review
-        </Link>
+        {review && (
+          <div className="mt-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
+            <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+              AI answer
+            </p>
+            <div className="mt-2 flex items-end justify-between gap-3">
+              <p className="text-2xl font-black">{Math.round(review.score * 100)}</p>
+              <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
+                {review.verdict.replaceAll("_", " ")}
+              </p>
+            </div>
+            <p className="mt-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+              {review.summary}
+            </p>
+          </div>
+        )}
       </aside>
 
       <style>{`
-        .developer-panel {
+        .delivery-panel {
           background:
             linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.55)),
             color-mix(in srgb, var(--surface) 88%, white);
           border: 1px solid rgba(20, 26, 35, 0.08);
           box-shadow:
-            0 28px 70px rgba(15, 23, 42, 0.07),
-            inset 0 1px 0 rgba(255, 255, 255, 0.74);
+            0 24px 64px rgba(15, 23, 42, 0.06),
+            inset 0 1px 0 rgba(255, 255, 255, 0.72);
         }
 
-        :root[data-theme="dark"] .developer-panel {
+        :root[data-theme="dark"] .delivery-panel {
           background:
             linear-gradient(180deg, rgba(32, 36, 43, 0.72), rgba(25, 27, 32, 0.58)),
             var(--surface);
           border-color: var(--border);
           box-shadow:
-            0 28px 70px rgba(0, 0, 0, 0.24),
+            0 24px 64px rgba(0, 0, 0, 0.24),
             inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .delivery-drop {
           background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.38)),
+            linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.38)),
             color-mix(in srgb, var(--surface-elevated) 72%, transparent);
-          border: 1px dashed color-mix(in srgb, #1dbf73 32%, rgba(20, 26, 35, 0.14));
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.64),
-            0 16px 38px rgba(29, 191, 115, 0.08);
-          transition:
-            border-color 180ms ease,
-            background-color 180ms ease,
-            transform 180ms ease;
-        }
-
-        .delivery-drop:hover {
-          border-color: #1dbf73;
-          transform: translateY(-1px);
+          border: 1px dashed color-mix(in srgb, var(--text-primary) 24%, rgba(20, 26, 35, 0.14));
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.64);
         }
 
         :root[data-theme="dark"] .delivery-drop {
           background:
             linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
             color-mix(in srgb, var(--surface-elevated) 78%, transparent);
-          border-color: color-mix(in srgb, #1dbf73 28%, var(--border));
+          border-color: color-mix(in srgb, var(--text-primary) 24%, var(--border));
         }
       `}</style>
     </section>
   );
 }
 
-function formatFileSize(size: number) {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+function makeStoredFiles(files: File[], role: string): StoredFile[] {
+  return files.map((file, index) => ({
+    id: `file_${role}_${jobId}_${index + 1}`,
+    url: `local-demo://${encodeURIComponent(file.name)}`,
+    filename: file.name,
+  }));
 }
 
-function DeliveryField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[14px] bg-white/50 p-4 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
-      <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-        {label}
-      </p>
-      <p className="mt-2 break-all text-[14px] font-black text-[var(--text-primary)]">
-        {value}
-      </p>
-    </div>
-  );
+function makeUrlFile(job: string, role: string, url: string): StoredFile {
+  const trimmed = url.trim();
+  const filename = trimmed.split("/").filter(Boolean).at(-1) || `${role}.zip`;
+
+  return {
+    id: `file_${role}_${job}`,
+    url: trimmed || `local-demo://${role}`,
+    filename,
+  };
 }
