@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 const steps = [
-  ["Sent", "Your request is with Orbit Labs."],
-  ["Wait", "We will notify you about every reply, offer, and message."],
+  ["Published", "Your job is visible to freelancers."],
+  ["Wait", "We will notify you about every bid, offer, and message."],
 ];
 
 export default function AcceptedJobPage() {
@@ -18,11 +18,11 @@ export default function AcceptedJobPage() {
             Success
           </p>
           <h1 className="mt-2 max-w-[520px] text-3xl font-black leading-tight sm:text-4xl">
-            Now wait for the client.
+            Now wait for a freelancer.
           </h1>
           <p className="mt-4 max-w-[500px] text-[15px] leading-6 text-[var(--text-secondary)]">
-            Your request was sent. We will notify you as soon as there is an
-            offer, message, or next step.
+            Your job is live. We will notify you as soon as someone sends a
+            bid, offer, or message.
           </p>
 
           <div className="mt-6 grid gap-3">
@@ -53,7 +53,7 @@ export default function AcceptedJobPage() {
             </Link>
             <Link
               className="inline-flex h-11 items-center justify-center rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 text-[13px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
-              href="/profile?view=freelancer"
+              href="/profile?view=customer"
             >
               Back to profile
             </Link>
