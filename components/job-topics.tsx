@@ -25,15 +25,15 @@ export function JobTopics() {
   }
 
   return (
-    <div className="mt-4 rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+    <div className="mt-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
       <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Topics</p>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         {topics.map((topic) => {
           const active = selectedTopics.includes(topic);
 
           return (
             <label
-              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[12px] font-black transition ${
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-black transition ${
                 active
                   ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--background)]"
                   : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]"

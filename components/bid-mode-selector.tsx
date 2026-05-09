@@ -37,20 +37,20 @@ export function BidModeSelector() {
   }
 
   return (
-    <div className="mt-4 rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+    <div className="mt-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Bid mode</p>
         <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
           {selectedModes.length} selected
         </p>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {bidModes.map((mode) => {
           const active = selectedModes.includes(mode.id);
 
           return (
             <button
-              className={`rounded-[12px] border bg-[var(--surface)] p-3 text-left text-[var(--text-primary)] transition ${
+              className={`rounded-[10px] border bg-[var(--surface)] p-2.5 text-left text-[var(--text-primary)] transition ${
                 active ? "border-[var(--text-primary)]" : "border-[var(--border)]"
               }`}
               key={mode.id}
@@ -69,7 +69,7 @@ export function BidModeSelector() {
                 </span>
                 <span>{mode.title}</span>
               </span>
-              <span className="mt-2 block text-[11px] text-[var(--text-muted)]">
+              <span className="mt-1 block text-[11px] text-[var(--text-muted)]">
                 {mode.detail}
               </span>
             </button>
