@@ -18,6 +18,7 @@ type JobLifecycleActionsProps = {
     clientWalletAddress?: string | null;
     freelancerWalletAddress?: string | null;
   } | null;
+  onSuccess?: () => void;
 };
 
 type ActionState =
@@ -26,7 +27,7 @@ type ActionState =
   | { status: "error"; message: string }
   | { status: "success"; message: string };
 
-export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps) {
+export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleActionsProps) {
   const router = useRouter();
   const [state, setState] = useState<ActionState>({ status: "idle" });
 
@@ -95,6 +96,7 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
       });
 
       setState({ status: "success", message: "Job accepted and escrow locked to your wallet." });
+      onSuccess?.();
       router.refresh();
     } catch (error) {
       setState({
@@ -166,6 +168,7 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
       });
 
       setState({ status: "success", message: "Escrow released and job completed." });
+      onSuccess?.();
       router.refresh();
     } catch (error) {
       setState({
@@ -179,18 +182,18 @@ export function JobLifecycleActions({ contract, job }: JobLifecycleActionsProps)
     <div className="mt-5 flex flex-wrap items-center gap-2">
       {contract?.status === "pending" && (
         <Link
-          className="inline-flex h-10 items-center rounded-[8px] bg-[var(--accent)] px-4 text-[12px] font-bold text-[var(--accent-contrast)]"
+          className={buttonClass}
           href={`/fund-escrow?job=${encodeURIComponent(job.id)}&contract=${encodeURIComponent(
             contract.id,
           )}`}
         >
-          Fund escrow
+          Open job
         </Link>
       )}
 
       {contract?.status === "funded" && (
         <button className={buttonClass} type="button" onClick={lockEscrow}>
-          Accept + lock
+          Accept job
         </button>
       )}
 

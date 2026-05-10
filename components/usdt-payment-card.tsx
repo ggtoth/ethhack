@@ -142,7 +142,7 @@ export function UsdtPaymentCard() {
     const provider = getEthereumProvider();
 
     if (!provider) {
-      setState({ status: "error", message: "Install MetaMask or Phantom to fund escrow." });
+      setState({ status: "error", message: "MetaMask not found. Install the MetaMask extension and refresh." });
       return;
     }
 
@@ -155,7 +155,7 @@ export function UsdtPaymentCard() {
       const from = accounts[0];
 
       if (!from) {
-        throw new Error("No wallet account selected.");
+        throw new Error("No wallet account selected. Open MetaMask and connect an account.");
       }
 
       await ensureSepoliaNetwork(provider);
@@ -170,13 +170,14 @@ export function UsdtPaymentCard() {
       setState({ status: "funded", txHash });
       router.refresh();
     } catch (error) {
-      setState({
-        status: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Funding was rejected or could not be confirmed.",
-      });
+      const raw = error as { message?: string; code?: number };
+      const msg =
+        error instanceof Error
+          ? error.message
+          : typeof raw?.message === "string"
+            ? raw.message
+            : `MetaMask error code ${String(raw?.code ?? "unknown")} — check the MetaMask popup and try again.`;
+      setState({ status: "error", message: msg });
     }
   }
 
@@ -243,42 +244,64 @@ export function UsdtPaymentCard() {
               </p>
             )}
 
-            {(state.status === "idle" || state.status === "confirming") && (
+            {state.status === "idle" && (
               <>
-                <p className="mt-3 text-[20px] font-black text-[var(--text-primary)]">
-                  {state.status === "confirming" ? "Confirming" : "Ready"}
+                <p className="mt-3 text-[18px] font-black text-[var(--text-primary)]">
+                  Ready to fund
                 </p>
-                <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-                  Your wallet will send the blockchain transaction. The backend only
-                  prepares metadata and records the confirmed tx hash.
-                </p>
+                <div className="mt-3 grid gap-2">
+                  <Step n={1} text='Click "Fund with wallet"' />
+                  <Step n={2} text="Approve in the MetaMask popup" />
+                  <Step n={3} text="Accept job as freelancer" />
+                </div>
               </>
             )}
 
+            {state.status === "confirming" && (
+              <div className="mt-3 flex items-center gap-3">
+                <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--text-primary)]" />
+                <div>
+                  <p className="text-[13px] font-black text-[var(--text-primary)]">
+                    Check MetaMask
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                    Click the MetaMask icon in your browser toolbar to approve the transaction.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {state.status === "confirming-ledger" && (
-              <div className="mt-4 flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--text-primary)]" />
-                <span className="text-[12px] font-black text-[var(--text-primary)]">
-                  Recording tx...
-                </span>
+              <div className="mt-3 flex items-center gap-3">
+                <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--text-primary)]" />
+                <p className="text-[13px] font-black text-[var(--text-primary)]">
+                  Recording on ledger…
+                </p>
               </div>
             )}
 
             {funded && (
-              <div className="mt-4 rounded-[12px] border border-[var(--border-strong)] bg-[var(--success-bg)] p-3">
-                <p className="text-[12px] font-black uppercase text-[var(--success)]">
+              <div className="mt-3 rounded-[12px] border border-[rgba(74,222,128,0.3)] bg-[rgba(74,222,128,0.08)] p-3">
+                <p className="text-[12px] font-black uppercase text-[#4ade80]">
                   Funded
                 </p>
-                <p className="mt-2 text-[13px] font-black text-[var(--text-primary)]">
-                  Escrow is funded in the workflow ledger.
+                <p className="mt-1.5 text-[13px] leading-5 text-[var(--text-secondary)]">
+                  Escrow is live on Sepolia. Go to My Jobs and click
+                  <strong className="text-[var(--text-primary)]"> Accept job</strong> to lock in as freelancer.
                 </p>
               </div>
             )}
 
             {state.status === "error" && (
-              <p className="mt-4 rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-3 text-[12px] font-black text-[var(--text-primary)]">
-                {state.message}
-              </p>
+              <div className="mt-3 rounded-[10px] border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.06)] px-4 py-3">
+                <p className="text-[11px] font-black uppercase text-[#f87171]">Error</p>
+                <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {state.message}
+                </p>
+                <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+                  Click the MetaMask extension icon, then try again.
+                </p>
+              </div>
             )}
 
             {txHash && (
@@ -296,7 +319,7 @@ export function UsdtPaymentCard() {
 
           {!funded ? (
             <button
-              className="h-11 rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] disabled:opacity-50"
+              className="h-11 w-full rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] transition hover:opacity-90 disabled:opacity-40"
               disabled={
                 !record ||
                 state.status === "loading" ||
@@ -307,21 +330,34 @@ export function UsdtPaymentCard() {
               onClick={fundEscrow}
             >
               {state.status === "confirming"
-                ? "Confirm in wallet..."
+                ? "Waiting for MetaMask..."
                 : state.status === "confirming-ledger"
                   ? "Recording..."
-                  : "Fund with wallet"}
+                  : state.status === "error"
+                    ? "Retry with wallet"
+                    : "Fund with wallet"}
             </button>
           ) : (
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)]"
+              className="inline-flex h-11 w-full items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] transition hover:opacity-90"
               href="/my-jobs"
             >
-              Track funded job
+              Go to My Jobs → Accept job
             </Link>
           )}
         </aside>
       </div>
+    </div>
+  );
+}
+
+function Step({ n, text }: { n: number; text: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-strong)] text-[10px] font-black text-[var(--text-muted)]">
+        {n}
+      </span>
+      <span className="text-[12px] text-[var(--text-secondary)]">{text}</span>
     </div>
   );
 }
