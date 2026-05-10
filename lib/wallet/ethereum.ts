@@ -32,6 +32,7 @@ export type WalletTransactionRequest = {
   to: string;
   value?: string;
   data?: string;
+  gas?: string;
 };
 
 export type WalletTransactionReceipt = {
@@ -111,6 +112,23 @@ export async function assertTransactionCanExecute(
       method: "eth_call",
       params: [transaction, "latest"],
     });
+  } catch (error) {
+    throw new Error(getWalletErrorMessage(error, fallbackMessage));
+  }
+}
+
+export async function estimateTransactionGas(
+  provider: EthereumProvider,
+  transaction: WalletTransactionRequest,
+  fallbackMessage: string,
+) {
+  try {
+    const estimatedGas = await provider.request<string>({
+      method: "eth_estimateGas",
+      params: [transaction],
+    });
+
+    return addGasBuffer(estimatedGas);
   } catch (error) {
     throw new Error(getWalletErrorMessage(error, fallbackMessage));
   }
@@ -222,6 +240,13 @@ function getNestedMessage(error: unknown): string | null {
   }
 
   return null;
+}
+
+function addGasBuffer(hexGas: string) {
+  const gas = BigInt(hexGas);
+  const bufferedGas = (gas * BigInt(13)) / BigInt(10);
+
+  return `0x${bufferedGas.toString(16)}`;
 }
 
 function sleep(ms: number) {

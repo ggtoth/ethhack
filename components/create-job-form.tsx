@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   assertTransactionCanExecute,
   ensureSepoliaNetwork,
+  estimateTransactionGas,
   getEthereumProvider,
   getWalletErrorMessage,
   SEPOLIA_CHAIN_ID_DECIMAL,
@@ -191,17 +192,28 @@ export function CreateJobForm() {
       await ensureSepoliaNetwork(provider);
 
       const prepared = await prepareFunding(payload);
+      const transaction = {
+        from,
+        to: prepared.transaction.to,
+        value: prepared.transaction.value ?? "0x0",
+        data: prepared.transaction.data,
+      };
+
       await assertTransactionCanExecute(
         provider,
-        {
-          from,
-          to: prepared.transaction.to,
-          value: prepared.transaction.value ?? "0x0",
-          data: prepared.transaction.data,
-        },
+        transaction,
         "Could not fund escrow.",
       );
-      const txHash = await sendPreparedTransaction(provider, from, prepared);
+      const gas = await estimateTransactionGas(
+        provider,
+        transaction,
+        "Could not estimate gas for escrow funding.",
+      );
+      const txHash = await withTimeout(
+        sendPreparedTransaction(provider, from, prepared, gas),
+        75_000,
+        "MetaMask did not return the transaction result. Check MetaMask Activity; if it failed, retry or use the hidden SOS demo button in the bottom-right corner.",
+      );
 
       setState({ status: "recording_ledger", txHash });
 
@@ -477,6 +489,7 @@ async function sendPreparedTransaction(
   provider: EthereumProvider,
   from: string,
   prepared: PreparedFunding,
+  gas: string,
 ) {
   return provider.request<string>({
     method: "eth_sendTransaction",
@@ -486,8 +499,28 @@ async function sendPreparedTransaction(
         to: prepared.transaction.to,
         value: prepared.transaction.value ?? "0x0",
         data: prepared.transaction.data,
+        gas,
       },
     ],
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      },
+    );
   });
 }
 
