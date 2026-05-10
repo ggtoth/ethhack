@@ -15,8 +15,8 @@ type Job = {
   status: string;
   budget: number;
   deadline: string;
-  requirements: string;
-  submissionNotes: string | null;
+  requirements?: string;
+  submissionNotes?: string | null;
 };
 
 type Contract = {
