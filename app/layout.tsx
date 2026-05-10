@@ -27,7 +27,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SmartJobs | AI Escrow Protocol",
+  title: "Smart Jobs | AI Escrow Protocol",
   description: "Crypto escrow and AI-assisted review for freelance work.",
 };
 

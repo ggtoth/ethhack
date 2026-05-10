@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAddress } from "viem";
 
 import { EnsAddress } from "@/components/ens-address";
@@ -140,12 +140,13 @@ export function DeveloperSubmitWorkspace() {
 
     const jobId = record.job.id;
     const contractId = record.contract.id;
-    const submittedSourceFiles = makeStoredFiles(projectFiles, jobId, "delivery");
-    const previewAssets = makeStoredFiles(previewFiles, jobId, "preview");
-    const previewFile = previewAssets[0];
-    const finalFile = submittedSourceFiles[0];
 
     try {
+      const submittedSourceFiles = await makeSourceStoredFiles(projectFiles, jobId);
+      const previewAssets = await makePreviewStoredFiles(previewFiles, jobId);
+      const previewFile = previewAssets[0];
+      const finalFile = submittedSourceFiles[0];
+
       const submitResponse = await fetch(`/jobs/${jobId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -245,22 +246,28 @@ export function DeveloperSubmitWorkspace() {
     }
   }
 
-  function handleProjectFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    setProjectFiles(files);
-
-    if (files.length > 0) {
-      setMessage(`${files.length} project file${files.length === 1 ? "" : "s"} selected.`);
-    }
+  function handleProjectFilesAdd(added: File[]) {
+    setProjectFiles((prev) => {
+      const next = [...prev, ...added];
+      setMessage(`${next.length} project file${next.length === 1 ? "" : "s"} ready.`);
+      return next;
+    });
   }
 
-  function handlePreviewFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    setPreviewFiles(files);
+  function handlePreviewFilesAdd(added: File[]) {
+    setPreviewFiles((prev) => {
+      const next = [...prev, ...added];
+      setMessage(`${next.length} preview file${next.length === 1 ? "" : "s"} ready.`);
+      return next;
+    });
+  }
 
-    if (files.length > 0) {
-      setMessage(`${files.length} preview file${files.length === 1 ? "" : "s"} selected.`);
-    }
+  function removeProjectFile(index: number) {
+    setProjectFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function removePreviewFile(index: number) {
+    setPreviewFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   return (
@@ -292,51 +299,22 @@ export function DeveloperSubmitWorkspace() {
         </div>
 
         <div className="mt-5 grid gap-3">
-          <label className="delivery-drop grid cursor-pointer gap-2 rounded-[14px] p-4">
-            <input
-              accept=".zip,.rar,.7z,.pdf,.png,.jpg,.jpeg,.webp,.fig,.txt,.md,.tsx,.ts,.js,.css"
-              className="sr-only"
-              multiple
-              type="file"
-              onChange={handleProjectFileChange}
-            />
-            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Project files
-            </span>
-            <span className="text-[18px] font-black text-[var(--text-primary)]">
-              {projectFiles.length > 0
-                ? `${projectFiles.length} file${projectFiles.length === 1 ? "" : "s"} ready`
-                : "Upload source package"}
-            </span>
-            {projectFiles.length > 0 && (
-              <span className="text-[13px] leading-5 text-[var(--text-secondary)]">
-                {projectFiles.map((file) => file.name).join(", ")}
-              </span>
-            )}
-          </label>
+          <FileDropZone
+            accept=".png,.jpg,.jpeg,.webp,.gif,.pdf"
+            files={previewFiles}
+            label="Screenshots"
+            showThumbnails
+            onAdd={handlePreviewFilesAdd}
+            onRemove={removePreviewFile}
+          />
 
-          <label className="delivery-drop grid cursor-pointer gap-2 rounded-[14px] p-4">
-            <input
-              accept=".png,.jpg,.jpeg,.webp,.gif,.pdf"
-              className="sr-only"
-              multiple
-              type="file"
-              onChange={handlePreviewFileChange}
-            />
-            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Preview files
-            </span>
-            <span className="text-[18px] font-black text-[var(--text-primary)]">
-              {previewFiles.length > 0
-                ? `${previewFiles.length} preview${previewFiles.length === 1 ? "" : "s"} ready`
-                : "Upload screenshots"}
-            </span>
-            {previewFiles.length > 0 && (
-              <span className="text-[13px] leading-5 text-[var(--text-secondary)]">
-                {previewFiles.map((file) => file.name).join(", ")}
-              </span>
-            )}
-          </label>
+          <FileDropZone
+            accept=".zip,.rar,.7z,.pdf,.png,.jpg,.jpeg,.webp,.fig,.txt,.md,.tsx,.ts,.js,.css"
+            files={projectFiles}
+            label="Source / project files"
+            onAdd={handleProjectFilesAdd}
+            onRemove={removeProjectFile}
+          />
 
           <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
@@ -607,12 +585,200 @@ function getCompletedSteps(jobStatus: string): FlowStep[] {
   return ["accepted"];
 }
 
-function makeStoredFiles(files: File[], jobId: string, role: string): StoredFile[] {
+function makeStoredFileReferences(files: File[], jobId: string, role: string): StoredFile[] {
   return files.map((file, index) => ({
     id: `file_${role}_${jobId}_${index + 1}`,
     url: `smartjobs-upload://${encodeURIComponent(file.name)}`,
     filename: file.name,
   }));
+}
+
+function makeSourceStoredFiles(files: File[], jobId: string): Promise<StoredFile[]> {
+  return Promise.all(
+    files.map(async (file, index) => ({
+      id: `file_delivery_${jobId}_${index + 1}`,
+      url: await readFileAsDataUrl(file),
+      filename: file.name,
+    })),
+  );
+}
+
+function makePreviewStoredFiles(files: File[], jobId: string): Promise<StoredFile[]> {
+  return Promise.all(
+    files.map(async (file, index) => ({
+      id: `file_preview_${jobId}_${index + 1}`,
+      url: await readFileAsDataUrl(file),
+      filename: file.name,
+    })),
+  );
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Could not read the preview file."));
+    });
+    reader.addEventListener("error", () => reject(new Error("Could not read the preview file.")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function FileDropZone({
+  label,
+  files,
+  accept,
+  showThumbnails = false,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  files: File[];
+  accept: string;
+  showThumbnails?: boolean;
+  onAdd: (files: File[]) => void;
+  onRemove: (index: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const added = Array.from(e.target.files ?? []);
+    if (added.length > 0) onAdd(added);
+    e.target.value = "";
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const added = Array.from(e.dataTransfer.files);
+    if (added.length > 0) onAdd(added);
+  }
+
+  return (
+    <div
+      className={`delivery-drop rounded-[14px] p-4 transition-colors ${dragging ? "border-solid border-[var(--text-primary)] bg-[var(--surface-strong)]" : ""}`}
+      onDragLeave={() => setDragging(false)}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDrop={handleDrop}
+    >
+      <input
+        ref={inputRef}
+        accept={accept}
+        className="sr-only"
+        multiple
+        type="file"
+        onChange={handleChange}
+      />
+
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">{label}</span>
+        <button
+          className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[11px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+          type="button"
+          onClick={() => inputRef.current?.click()}
+        >
+          <span>+</span>
+          {files.length === 0 ? "Add files" : "Add more"}
+        </button>
+      </div>
+
+      {files.length === 0 ? (
+        <button
+          className="mt-3 flex w-full flex-col items-center justify-center gap-1 py-4 text-[var(--text-muted)]"
+          type="button"
+          onClick={() => inputRef.current?.click()}
+        >
+          <span className="text-3xl">↑</span>
+          <span className="text-[13px] font-black">Drop files or click to browse</span>
+          <span className="text-[11px]">{accept.replace(/\./g, "").replace(/,/g, "  ")}</span>
+        </button>
+      ) : (
+        <div className={`mt-3 ${showThumbnails ? "grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5" : "grid gap-2"}`}>
+          {files.map((file, index) => (
+            <FileItem
+              key={`${file.name}-${index}`}
+              file={file}
+              showThumbnail={showThumbnails}
+              onRemove={() => onRemove(index)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FileItem({
+  file,
+  showThumbnail,
+  onRemove,
+}: {
+  file: File;
+  showThumbnail: boolean;
+  onRemove: () => void;
+}) {
+  const isImage = file.type.startsWith("image/");
+  const previewUrl = useMemo(
+    () => (isImage ? URL.createObjectURL(file) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [file.name, file.size],
+  );
+
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
+
+  if (showThumbnail && isImage && previewUrl) {
+    return (
+      <div className="group relative">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          alt={file.name}
+          className="h-24 w-full rounded-[10px] border border-[var(--border)] object-cover"
+          src={previewUrl}
+        />
+        <button
+          className="absolute right-1 top-1 hidden h-6 w-6 items-center justify-center rounded-full bg-black/70 text-[13px] font-black text-white group-hover:flex"
+          type="button"
+          onClick={onRemove}
+        >
+          ×
+        </button>
+        <p className="mt-1 truncate text-center text-[10px] text-[var(--text-muted)]">
+          {file.name}
+        </p>
+      </div>
+    );
+  }
+
+  const ext = file.name.split(".").pop()?.toUpperCase() ?? "FILE";
+  const kb = (file.size / 1024).toFixed(0);
+
+  return (
+    <div className="flex items-center gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] bg-[var(--surface-strong)] text-[10px] font-black text-[var(--text-muted)]">
+        {ext}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[12px] font-black text-[var(--text-primary)]">{file.name}</p>
+        <p className="text-[11px] text-[var(--text-muted)]">{kb} KB</p>
+      </div>
+      <button
+        className="shrink-0 text-[18px] font-black text-[var(--text-muted)] transition hover:text-[var(--text-primary)]"
+        type="button"
+        onClick={onRemove}
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 function BuyerIdentity({ address }: { address: string | null }) {

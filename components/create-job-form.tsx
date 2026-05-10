@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -70,9 +70,12 @@ type PreparedFunding = {
 
 export function CreateJobForm() {
   const router = useRouter();
-  const [title, setTitle] = useState("");
+  const searchParams = useSearchParams();
+  const prefillTitle = searchParams.get("title") ?? "";
+  const prefillFrom = searchParams.get("from") ?? "";
+  const [title, setTitle] = useState(prefillTitle);
   const [details, setDetails] = useState("");
-  const [budgetUsd, setBudgetUsd] = useState("");
+  const [budgetUsd, setBudgetUsd] = useState("100");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [state, setState] = useState<CreateState>({ status: "idle" });
   const budgetDisplay = budgetUsd.trim() ? Number(budgetUsd).toLocaleString("en-US") : "0";
@@ -216,9 +219,21 @@ export function CreateJobForm() {
 
   return (
     <div className="col-span-full rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
+      {prefillFrom && (
+        <div className="mb-5 flex items-start gap-3 rounded-[12px] border border-[color-mix(in_srgb,#eab308_30%,var(--border))] bg-[color-mix(in_srgb,#eab308_6%,var(--surface))] px-4 py-3">
+          <span className="mt-0.5 text-[16px]">↩</span>
+          <div>
+            <p className="text-[12px] font-black text-[var(--text-primary)]">Reposting after rejection</p>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+              The previous offer was rejected. Edit the title and description below to clarify your requirements, then post a new job.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">New job</p>
+          <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">{prefillFrom ? "Repost job" : "New job"}</p>
           <h1 className="mt-2 text-[30px] font-black leading-none text-[var(--text-primary)]">
             Create escrow
           </h1>
@@ -324,7 +339,7 @@ export function CreateJobForm() {
               <input
                 className="w-full bg-transparent text-[16px] font-black text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] placeholder:opacity-60"
                 inputMode="decimal"
-                placeholder="1500"
+                placeholder="100"
                 value={budgetUsd}
                 onChange={(event) => setBudgetUsd(normalizeUsdInput(event.target.value))}
               />

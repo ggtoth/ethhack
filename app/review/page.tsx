@@ -7,7 +7,11 @@ import { getAddress } from "viem";
 
 import { getReviewDisplay } from "@/lib/review/display";
 import type { ReviewResult } from "@/lib/review/schema";
-import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
+import {
+  ensureSepoliaNetwork,
+  getEthereumProvider,
+  waitForTransactionReceipt,
+} from "@/lib/wallet/ethereum";
 
 type JobRecord = {
   job: {
@@ -60,6 +64,7 @@ export default function ReviewPage() {
   const [liveReview, setLiveReview] = useState<ReviewResult | null>(null);
   const [swarmProof, setSwarmProof] = useState<SwarmProof | null>(null);
   const [state, setState] = useState<ActionState>({ status: "idle" });
+  const [checklistOpen, setChecklistOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +77,14 @@ export default function ReviewPage() {
           status: "error",
           message: "Open the review page with a specific job ID.",
         });
+        return;
+      }
+
+      const pendingJobId = window.localStorage.getItem("smartjobs:last-ai-review-job-id");
+      const pendingStatus = window.localStorage.getItem("smartjobs:last-ai-review-status");
+
+      if (pendingJobId === jobId && pendingStatus === "pending") {
+        router.replace(`/review/pending?job=${encodeURIComponent(jobId)}`);
         return;
       }
 
@@ -118,7 +131,7 @@ export default function ReviewPage() {
       window.removeEventListener("smartjobs-ai-review-updated", handleReviewUpdate);
       window.removeEventListener("storage", handleReviewUpdate);
     };
-  }, [jobId]);
+  }, [jobId, router]);
 
   const displayInput = liveReview
     ? reviewResultToDisplayInput(liveReview)
@@ -133,6 +146,7 @@ export default function ReviewPage() {
     !!record?.job.aiReview &&
     (record.contract.status === "locked" || record.contract.status === "release_requested");
   const manifest = buildSourceManifest(record);
+  const reviewPreviewFile = getReviewPreviewFile(record);
   const zoneStyle = {
     "--review-zone": display.color,
     "--review-zone-bg": display.background,
@@ -195,6 +209,47 @@ export default function ReviewPage() {
         ],
       });
 
+      if (action === "release") {
+        setState({ status: "working", label: "Waiting for chain confirmation..." });
+        await waitForTransactionReceipt(provider, transactionHash);
+        setState({ status: "working", label: "Opening release page..." });
+
+        const confirmed = await withTimeout(
+          postJson(`/escrow-contracts/${record.contract.id}/onchain/confirm`, {
+            action,
+            transactionHash,
+          }),
+          8_000,
+        ).catch((error: unknown) => {
+          if (isTimeoutError(error)) {
+            return null;
+          }
+
+          throw error;
+        });
+
+        if (confirmed && isConfirmedContractResponse(confirmed)) {
+          setRecord((current) =>
+            current
+              ? {
+                  ...current,
+                  job: {
+                    ...current.job,
+                    status: "completed",
+                  },
+                  contract: {
+                    ...current.contract,
+                    status: confirmed.contract.status,
+                  },
+                }
+              : current,
+          );
+        }
+
+        navigateToReleaseSuccess(jobId);
+        return;
+      }
+
       const confirmed = await postJson(
         `/escrow-contracts/${record.contract.id}/onchain/confirm`,
         { action, transactionHash },
@@ -206,7 +261,7 @@ export default function ReviewPage() {
               ...current,
               job: {
                 ...current.job,
-                status: action === "release" ? "completed" : "cancelled",
+                status: "cancelled",
               },
               contract: {
                 ...current.contract,
@@ -217,10 +272,7 @@ export default function ReviewPage() {
       );
       setState({
         status: "success",
-        message:
-          action === "release"
-            ? "Funds released to the freelancer. The source package is now available."
-            : "Escrow refunded to the buyer. Only the preview remains visible.",
+        message: "Escrow refunded to the buyer. Only the preview remains visible.",
       });
       router.refresh();
     } catch (error) {
@@ -233,10 +285,10 @@ export default function ReviewPage() {
   }
 
   return (
-    <main className="relative flex flex-1 items-center overflow-hidden bg-[var(--background)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">
+    <main className="relative flex flex-1 items-start overflow-y-auto bg-[var(--background)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">
       {display.zone === "good" && sourceReleased && <Confetti />}
 
-      <section className="mx-auto grid w-full max-w-[980px] gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="mx-auto flex w-full max-w-[780px] flex-col gap-5">
         <div
           className="review-shell relative overflow-hidden rounded-[18px] p-6 text-center sm:p-10"
           style={zoneStyle}
@@ -291,6 +343,20 @@ export default function ReviewPage() {
             </div>
           </div>
 
+          {reviewPreviewFile && (
+            <div className="mt-8 w-full text-center">
+              <p className="mb-4 text-[11px] font-black uppercase text-[var(--text-muted)]">
+                Freelancer preview
+              </p>
+              <SubmittedPreview file={reviewPreviewFile} sourceReleased={sourceReleased} />
+              {!sourceReleased && (
+                <p className="mt-3 text-[12px] text-[var(--text-muted)]">
+                  Approve &amp; release to receive the original high-quality file
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="mx-auto mt-5 max-w-[420px] text-[14px] leading-6 text-[var(--text-secondary)]">
             {reviewSummary}
           </p>
@@ -340,13 +406,19 @@ export default function ReviewPage() {
             </button>
           )}
 
+          {(state.status === "working" || state.status === "error" || state.status === "success") && (
+            <div className="mx-auto mt-5 w-full max-w-[460px] rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+              {state.status === "working" ? state.label : state.message}
+            </div>
+          )}
+
           {!sourceReleased && (
             <div className="mx-auto mt-4 max-w-[420px] rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-left">
               <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
                 Preview is visible
               </p>
               <p className="mt-2 break-all text-[12px] leading-5 text-[var(--text-secondary)]">
-                {record?.job.previewFile?.url ?? "No preview submitted yet."}
+                {reviewPreviewFile?.filename ?? "No preview submitted yet."}
               </p>
               <p className="mt-3 text-[12px] leading-5 text-[var(--text-secondary)]">
                 The source package stays hidden unless the buyer approves and releases funds.
@@ -355,10 +427,31 @@ export default function ReviewPage() {
           )}
 
           {record?.contract.status === "refunded" && (
-            <p className="mx-auto mt-4 max-w-[360px] text-[12px] leading-5 text-[var(--text-muted)]">
-              This escrow was refunded to the buyer. The preview remains visible, but the
-              source package is not released.
-            </p>
+            <div className="mx-auto mt-6 w-full max-w-[500px] rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-6 py-5 text-center">
+              <p className="text-[13px] font-black uppercase text-[var(--text-muted)]">
+                Offer rejected
+              </p>
+              <p className="mt-2 text-[14px] leading-6 text-[var(--text-secondary)]">
+                The escrow was refunded. Would you like to repost this job with a clearer description, or find a different freelancer?
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <Link
+                  className="inline-flex min-h-11 items-center justify-center rounded-[11px] bg-[var(--button)] px-5 text-center text-[14px] font-black text-[var(--button-text)] transition hover:bg-[var(--accent-hover)]"
+                  href={`/post-job?from=${encodeURIComponent(jobId)}&title=${encodeURIComponent(record.job.title ?? "")}`}
+                >
+                  Repost with changes
+                </Link>
+                <Link
+                  className="inline-flex min-h-11 items-center justify-center rounded-[11px] border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-center text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--text-primary)]"
+                  href="/find-job"
+                >
+                  Find another freelancer
+                </Link>
+              </div>
+              <p className="mt-4 text-[11px] text-[var(--text-muted)]">
+                The preview image remains visible. Source files are not released.
+              </p>
+            </div>
           )}
 
           {swarmProof && (
@@ -429,54 +522,76 @@ export default function ReviewPage() {
           )}
         </div>
 
-        <aside className="review-shell rounded-[18px] p-5 text-left">
-          <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
-            Buyer checklist
-          </p>
-          <div className="mt-4 grid gap-3 text-[13px]">
-            <Detail label="Job" value={record?.job.title ?? jobId} />
-            <Detail
-              label="Escrow state"
-              value={record?.contract.status.replaceAll("_", " ") ?? "loading"}
-            />
-            <Detail
-              label="Freelancer payout"
-              value={record?.contract.freelancerWalletAddress ?? "Not accepted yet"}
-            />
-            <Detail
-              label="Preview"
-              value={record?.job.previewFile?.filename ?? "No preview uploaded"}
-            />
-            <Detail
-              label="Source access"
-              value={sourceReleased ? "Released to buyer" : "Blocked until release"}
-            />
-            <Detail
-              label="Submission notes"
-              value={record?.job.submissionNotes ?? "No notes stored."}
-            />
-          </div>
+        <aside className="review-shell rounded-[18px] text-left">
+          <button
+            className="flex w-full items-center justify-between p-5 text-left"
+            type="button"
+            onClick={() => setChecklistOpen((o) => !o)}
+          >
+            <p className="text-[12px] font-black uppercase text-[var(--text-muted)]">
+              Buyer checklist
+            </p>
+            <span
+              className="text-[18px] text-[var(--text-muted)] transition-transform duration-200"
+              style={{ display: "inline-block", transform: checklistOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            >
+              ▾
+            </span>
+          </button>
 
-          {(state.status === "working" || state.status === "error" || state.status === "success") && (
-            <div className="mt-5 rounded-[12px] bg-[var(--surface-strong)] px-4 py-3 text-[13px] leading-5 text-[var(--text-secondary)]">
-              {state.status === "working" ? state.label : state.message}
+          {checklistOpen && (
+            <div className="px-5 pb-5">
+              <div className="grid gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-3">
+                <Detail label="Job" value={record?.job.title ?? jobId} />
+                <Detail
+                  label="Escrow state"
+                  value={record?.contract.status.replaceAll("_", " ") ?? "loading"}
+                />
+                <Detail
+                  label="Freelancer payout"
+                  value={record?.contract.freelancerWalletAddress ?? "Not accepted yet"}
+                />
+                <Detail
+                  label="Preview"
+                  value={reviewPreviewFile?.filename ?? "No preview uploaded"}
+                />
+                <Detail
+                  label="Source access"
+                  value={sourceReleased ? "Released to buyer" : "Blocked until release"}
+                />
+                <Detail
+                  label="Submission notes"
+                  value={record?.job.submissionNotes ?? "No notes stored."}
+                />
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+                  href={`/submit-work?job=${encodeURIComponent(jobId)}`}
+                >
+                  Back to submission
+                </Link>
+                <Link
+                  className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+                  href={`/ai-review?job=${encodeURIComponent(jobId)}`}
+                >
+                  Review context
+                </Link>
+              </div>
             </div>
           )}
 
-          <div className="mt-5 grid gap-3">
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
-              href={`/submit-work?job=${encodeURIComponent(jobId)}`}
-            >
-              Back to submission
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
-              href={`/ai-review?job=${encodeURIComponent(jobId)}`}
-            >
-              Review context
-            </Link>
-          </div>
+          {!checklistOpen && (
+            <div className="px-5 pb-5 grid gap-3">
+              <Link
+                className="inline-flex h-11 items-center justify-center rounded-[11px] border border-[var(--border)] bg-[var(--surface)] px-6 text-[14px] font-black text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+                href={`/submit-work?job=${encodeURIComponent(jobId)}`}
+              >
+                Back to submission
+              </Link>
+            </div>
+          )}
         </aside>
       </section>
 
@@ -694,6 +809,74 @@ export default function ReviewPage() {
           }
         }
 
+        .preview-wm-wrapper {
+          position: relative;
+          display: block;
+          width: fit-content;
+          max-width: 100%;
+          margin-left: auto;
+          margin-right: auto;
+          border-radius: 14px;
+          overflow: hidden;
+          user-select: none;
+          border: 1px solid var(--border);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        }
+
+        .preview-wm-img {
+          display: block;
+          max-width: 100%;
+          max-height: 480px;
+          width: auto;
+          height: auto;
+          object-fit: contain;
+        }
+
+        .preview-pdf-frame {
+          display: block;
+          width: 100%;
+          height: min(420px, 58vh);
+          border: 0;
+          background: var(--surface);
+        }
+
+        .preview-file-card {
+          border: 1px solid var(--border);
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.38)),
+            var(--surface);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+        }
+
+        .preview-wm-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: repeating-linear-gradient(
+            -45deg,
+            transparent 0,
+            transparent 52px,
+            rgba(0, 0, 0, 0.06) 52px,
+            rgba(0, 0, 0, 0.06) 54px
+          );
+        }
+
+        .preview-wm-text {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: 0.18em;
+          color: rgba(255, 255, 255, 0.8);
+          text-shadow: 0 0 14px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.6);
+          transform: rotate(-20deg);
+          text-transform: uppercase;
+        }
+
         @keyframes confetti-fall {
           0% {
             opacity: 0;
@@ -728,6 +911,10 @@ function buildSourceManifest(record: JobRecord | null) {
     }`,
     `Submission notes: ${record.job.submissionNotes ?? "None"}`,
   ].join("\n");
+}
+
+function getReviewPreviewFile(record: JobRecord | null) {
+  return record?.job.previewFile ?? record?.job.submittedSourceFiles[0] ?? record?.job.finalFile ?? null;
 }
 
 function loadStoredReview(
@@ -896,6 +1083,23 @@ async function postJson(url: string, body: Record<string, unknown>) {
   return payload;
 }
 
+function navigateToReleaseSuccess(jobId: string) {
+  window.location.assign(`/review/success?job=${encodeURIComponent(jobId)}`);
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error("timeout")), timeoutMs);
+    }),
+  ]);
+}
+
+function isTimeoutError(error: unknown) {
+  return error instanceof Error && error.message === "timeout";
+}
+
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
@@ -903,6 +1107,132 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="mt-2 break-all text-[13px] leading-5 text-[var(--text-primary)]">
         {value}
       </p>
+    </div>
+  );
+}
+
+function isImageFile(url: string, filename: string) {
+  const loadable = /^(data:|blob:|https?:\/\/)/i.test(url);
+  const imageExt =
+    /\.(png|jpe?g|gif|webp|svg|bmp|avif)($|[?#])/i.test(url) ||
+    /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(filename);
+  return loadable && imageExt;
+}
+
+function isPdfFile(url: string, filename: string) {
+  return url.startsWith("data:application/pdf") || /\.pdf$/i.test(filename) || /\.pdf($|[?#])/i.test(url);
+}
+
+function canOpenPreviewUrl(url: string) {
+  return /^(data:|blob:|https?:)/i.test(url);
+}
+
+function SubmittedPreview({
+  file,
+  sourceReleased,
+}: {
+  file: StoredFile;
+  sourceReleased: boolean;
+}) {
+  const [broken, setBroken] = useState(false);
+
+  if (isImageFile(file.url, file.filename)) {
+    if (sourceReleased) {
+      if (broken) return <FilePreviewCard file={file} />;
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt={file.filename}
+          className="mx-auto block max-h-[480px] w-auto max-w-full rounded-[14px] border border-[var(--border)] shadow-md"
+          src={file.url}
+          onError={() => setBroken(true)}
+        />
+      );
+    }
+
+    return <WatermarkedPreview filename={file.filename} url={file.url} />;
+  }
+
+  if (isPdfFile(file.url, file.filename) && canOpenPreviewUrl(file.url)) {
+    return (
+      <div className="preview-wm-wrapper mx-auto block w-full" onContextMenu={(e) => e.preventDefault()}>
+        <object
+          aria-label={file.filename}
+          className="preview-pdf-frame"
+          data={file.url}
+          type="application/pdf"
+        >
+          <FilePreviewCard file={file} />
+        </object>
+        {!sourceReleased && (
+          <>
+            <div aria-hidden="true" className="preview-wm-overlay" />
+            <div aria-hidden="true" className="preview-wm-text">PREVIEW ONLY</div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return <FilePreviewCard file={file} />;
+}
+
+function FilePreviewCard({ file }: { file: StoredFile }) {
+  const canOpen = canOpenPreviewUrl(file.url);
+
+  return (
+    <div className="preview-file-card mx-auto grid w-full max-w-[460px] gap-3 rounded-[12px] px-4 py-4 text-left">
+      <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+        Submitted file
+      </p>
+      <p className="break-all text-[14px] font-black text-[var(--text-primary)]">
+        {file.filename}
+      </p>
+      {canOpen ? (
+        <a
+          className="inline-flex h-10 w-fit items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[12px] font-black text-[var(--text-primary)] transition hover:border-[var(--text-primary)]"
+          href={file.url}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Open preview
+        </a>
+      ) : (
+        <p className="break-all text-[12px] leading-5 text-[var(--text-secondary)]">
+          {file.url}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function WatermarkedPreview({ url, filename }: { url: string; filename: string }) {
+  const [broken, setBroken] = useState(false);
+
+  if (broken) {
+    return (
+      <div className="mx-auto w-fit rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-6 py-5 text-center">
+        <p className="text-[13px] font-black text-[var(--text-primary)]">{filename}</p>
+        <p className="mt-2 text-[12px] text-[var(--text-muted)]">Preview will be available after approval</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="preview-wm-wrapper mx-auto"
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        alt={filename}
+        className="preview-wm-img"
+        draggable={false}
+        src={url}
+        onError={() => setBroken(true)}
+      />
+      <div aria-hidden="true" className="preview-wm-overlay" />
+      <div aria-hidden="true" className="preview-wm-text">PREVIEW ONLY</div>
     </div>
   );
 }

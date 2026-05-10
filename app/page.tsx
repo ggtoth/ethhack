@@ -32,11 +32,7 @@ export default function Home() {
     <main className="flex flex-1 flex-col bg-[var(--background)] font-mono text-[var(--text-primary)]">
       <section className="mx-auto flex w-full max-w-[1040px] flex-col items-center px-4 pb-10 pt-12 text-center sm:px-6 sm:pt-16 lg:px-8 lg:pt-20">
         <h1 className="max-w-[620px] text-[44px] font-black leading-[0.98] tracking-normal text-[var(--text-primary)] sm:text-[64px] lg:text-[68px]">
-          Crypto
-          <br />
-          freelance
-          <br />
-          escrow
+          Smart Jobs
         </h1>
         <p className="mt-6 max-w-[760px] text-[15px] leading-7 text-[var(--text-secondary)] sm:text-[16px]">
           Hire work. Lock payment. Approve proof.

@@ -4,26 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-const ALL_TOPICS = [
-  "Web Design",
-  "Landing Page",
-  "Frontend",
-  "Responsive",
-  "No-code",
-  "Branding",
-  "Bug Fix",
-  "Smart Contract",
-];
-
-const BID_MODES = [
-  { id: "fixed", label: "Fixed escrow", description: "Client locks one price." },
-  { id: "open", label: "Open bids", description: "Freelancers send offers." },
-  { id: "dutch", label: "Dutch bid", description: "Freelancers can underbid." },
-  { id: "hybrid", label: "Hybrid", description: "Fixed cap + underbids." },
-];
-
-const DEFAULT_TOPICS = ["Web Design", "Landing Page", "Frontend"];
-const DEFAULT_MODES = ["fixed", "hybrid"];
 const ETH_USD_RATE = 3500;
 
 type JobRecord = {
@@ -48,8 +28,6 @@ type JobListItem = {
 export default function JobDetailPage() {
   const searchParams = useSearchParams();
   const jobId = searchParams.get("job") ?? "";
-  const [selectedTopics, setSelectedTopics] = useState<string[]>(DEFAULT_TOPICS);
-  const [selectedModes, setSelectedModes] = useState<string[]>(DEFAULT_MODES);
   const [record, setRecord] = useState<JobRecord | null>(null);
 
   useEffect(() => {
@@ -85,141 +63,60 @@ export default function JobDetailPage() {
   }, [jobId]);
 
   const jobTitle = record?.job.title ?? "Job";
-  const jobDescription = record?.job.description ?? "Loading job details...";
-  const jobRequirements = record?.job.requirements ?? jobDescription;
+  const jobRequirements =
+    record?.job.requirements ?? record?.job.description ?? "Loading job details...";
   const escrowAmount = useMemo(() => {
     const budget = record?.job.budget ?? record?.contract?.amount ?? 0;
 
     return budgetToUsd(budget);
   }, [record?.contract?.amount, record?.job.budget]);
 
-  function toggleTopic(topic: string) {
-    setSelectedTopics((prev) =>
-      prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic],
-    );
-  }
-
-  function toggleMode(id: string) {
-    setSelectedModes((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
-    );
-  }
-
   return (
-    <main className="flex flex-1 flex-col bg-[var(--background)] px-4 py-6 font-mono text-[var(--text-primary)] sm:px-6 lg:px-8">
-      <section className="mx-auto grid w-full max-w-[940px] gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+    <main className="flex flex-1 flex-col bg-[var(--background)] px-4 py-4 font-mono text-[var(--text-primary)] sm:px-6 lg:px-8">
+      <section className="mx-auto grid w-full max-w-[980px] gap-4 lg:grid-cols-[minmax(0,1fr)_250px]">
 
         {/* ── Main card ── */}
-        <article className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)] sm:p-6">
+        <article className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-soft)] sm:p-5">
 
           {/* Header */}
           <p className="text-[11px] font-black uppercase text-[var(--success)]">
             Escrow funded
           </p>
-          <h1 className="mt-1 text-[36px] font-black leading-none sm:text-[48px]">
+          <h1 className="mt-1 text-[30px] font-black leading-none sm:text-[38px]">
             Ready for freelancer
           </h1>
 
-          {/* Job title */}
-          <div className="mt-5 rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
-            <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Job</p>
+          <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+            <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Job title</p>
             <p className="mt-1 text-[16px] font-black text-[var(--text-primary)]">
               {jobTitle}
             </p>
-            <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">
-              {jobDescription}
-            </p>
           </div>
 
-          {/* Deliverables */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {buildBriefTags(jobRequirements).map((d) => (
-              <span
-                key={d}
-                className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2 text-[13px] font-black text-[var(--text-primary)]"
-              >
-                {d}
-              </span>
-            ))}
-          </div>
-
-          {/* Topics */}
-          <div className="mt-5">
-            <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Topics</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {ALL_TOPICS.map((topic) => {
-                const active = selectedTopics.includes(topic);
-                return (
-                  <button
-                    key={topic}
-                    type="button"
-                    onClick={() => toggleTopic(topic)}
-                    className={`rounded-full px-4 py-1.5 text-[13px] font-black transition ${
-                      active
-                        ? "bg-[var(--text-primary)] text-[var(--background)]"
-                        : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-primary)]"
-                    }`}
-                  >
-                    {active ? `✓ ${topic}` : `+ ${topic}`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Bid Mode */}
-          <div className="mt-5">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-                Bid mode
-              </p>
-              <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-                {selectedModes.length} selected
+          <div className="mt-4 rounded-[14px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4 sm:p-5">
+            <div className="flex flex-col gap-2 border-b border-[var(--border)] pb-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+                  Client brief
+                </p>
+                <h2 className="mt-1 text-[22px] font-black leading-tight text-[var(--text-primary)] sm:text-[26px]">
+                  What the user needs
+                </h2>
+              </div>
+              <p className="max-w-[260px] text-[11px] font-bold leading-5 text-[var(--text-muted)] sm:text-right">
+                Single source of truth for the freelancer.
               </p>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {BID_MODES.map((mode) => {
-                const active = selectedModes.includes(mode.id);
-                return (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => toggleMode(mode.id)}
-                    className={`flex items-start gap-3 rounded-[12px] border p-3 text-left transition ${
-                      active
-                        ? "border-[var(--text-primary)] bg-[var(--surface-elevated)]"
-                        : "border-[var(--border)] bg-[var(--surface-elevated)]"
-                    }`}
-                  >
-                    <span
-                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
-                        active
-                          ? "border-[var(--text-primary)] bg-[var(--text-primary)]"
-                          : "border-[var(--border-strong)]"
-                      }`}
-                    >
-                      {active && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--background)]" />
-                      )}
-                    </span>
-                    <span>
-                      <span className="block text-[13px] font-black text-[var(--text-primary)]">
-                        {mode.label}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">
-                        {mode.description}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
+
+            <div className="mt-4 whitespace-pre-wrap break-words rounded-[12px] bg-[var(--surface)] p-4 text-left text-[14px] font-bold leading-6 text-[var(--text-primary)] shadow-[inset_0_0_0_1px_var(--border)] sm:text-[15px] sm:leading-7">
+              {jobRequirements}
             </div>
           </div>
 
           {/* Accept button */}
           <Link
             href={`/jobs/landing-page-implementation/accepted${record?.job.id ? `?job=${encodeURIComponent(record.job.id)}` : ""}`}
-            className="mt-6 inline-flex h-11 items-center justify-center rounded-[11px] bg-[var(--button)] px-8 text-[13px] font-black text-[var(--button-text)] transition hover:opacity-90"
+            className="mt-5 inline-flex h-11 items-center justify-center rounded-[11px] bg-[var(--button)] px-8 text-[13px] font-black text-[var(--button-text)] transition hover:opacity-90"
           >
             Publish job
           </Link>
@@ -279,14 +176,4 @@ function budgetToUsd(eth: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   });
-}
-
-function buildBriefTags(requirements: string) {
-  const tags = requirements
-    .split(/\n|,|\./)
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .slice(0, 3);
-
-  return tags.length > 0 ? tags : ["Client brief"];
 }
