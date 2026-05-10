@@ -25,13 +25,18 @@ result.chunkType   // "CAC"
 result.json        // { verdict: "MATCH", score: 92 }
 result.text        // raw UTF-8 if not JSON
 
-// Mutable feed (SOC — Single Owner Chunk)
+// Mutable feed (SOC — Single Owner Chunk, strict verification)
 const feed = await verifiedFetchFeed("https://bzz.limo", ownerAddress, topicHex);
 
-feed.verified        // true — Ethereum signature verified
-feed.owner           // "0xf39fd6e5..." — recovered from signature
-feed.dataReference   // "da04a66c..." — current content reference
-feed.dataUrl         // https://bzz.limo/bytes/da04a66c...
+feed.verified            // true — ALL of: sig valid + owner matches + identifier matches
+feed.signatureValid      // ECDSA recovery succeeded
+feed.ownerMatches        // recovered owner == declared owner
+feed.identifierMatches   // chunk identifier == keccak256(topic ‖ feedIndex)
+feed.feedIndex           // integer index of the feed slot
+feed.identifier          // computed identifier (32-byte hex)
+feed.owner               // "0xf39fd6e5..." — recovered from signature
+feed.dataReference       // "da04a66c..." — current content reference
+feed.dataUrl             // https://bzz.limo/bytes/da04a66c...
 ```
 
 ## How it works
@@ -39,7 +44,7 @@ feed.dataUrl         // https://bzz.limo/bytes/da04a66c...
 ### CAC — Content Addressed Chunk (immutable data)
 
 ```
-chunk bytes = [span: 8 bytes] [payload: 1–4096 bytes]
+chunk bytes = [span: 8 bytes LE uint64] [payload: 1–4096 bytes]
 
 address = keccak256(
   span ‖ BMT_root(zero_pad(payload, 4096))
@@ -61,14 +66,28 @@ chunk bytes = [identifier: 32] [signature: 65] [span: 8] [payload: …]
 
 address = keccak256(identifier ‖ ownerAddress)
 
-Verification:
-  1. Compute CAC address of the wrapped content (span ‖ payload)
-  2. Recover signer: ecrecover(identifier ‖ cacAddress, signature)
-  3. Compute expected address: keccak256(identifier ‖ recoveredOwner)
-  4. Compare to reference — if match, feed update is authentic
+For a sequence feed slot:
+  identifier = keccak256(topic[32] ‖ feedIndex[8 BE])
+  address    = keccak256(identifier[32] ‖ owner[20])
+
+Sequence feed payload:
+  [timestamp: 8 bytes BE] [content reference: 32 bytes]
+
+Verification (strict):
+  1. GET /feeds/{owner}/{topic}?type=sequence
+     → read swarm-feed-index header (16-char hex = 8-byte BE uint64)
+  2. Compute identifier = keccak256(topic ‖ feedIndexBytes)
+  3. Compute expectedSocRef = keccak256(identifier ‖ ownerBytes)
+  4. GET /chunks/{expectedSocRef}
+  5. Recover signer: ecrecover(keccak256(identifier ‖ cacAddress), signature)
+  6. Check ownerMatches: recovered == declared owner
+  7. Check identifierMatches: chunk identifier == computed identifier
+  8. Extract dataReference: payload[8:40]
 ```
 
-A valid SOC proves the data was signed by the private key corresponding to `ownerAddress` — impossible to forge without the key.
+A valid, fully verified SOC proves:
+- The data was signed by the private key of `ownerAddress` (cannot be forged)
+- The feed slot belongs to the correct (owner, topic, index) triple (cannot be substituted)
 
 ## API
 
@@ -105,10 +124,61 @@ const result: VerifiedFeedResult = await verifiedFetchFeed(
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `verified` | `boolean` | `true` if SOC signature is valid |
+| `verified` | `boolean` | `true` iff sig valid + owner matches + identifier matches |
+| `signatureValid` | `boolean` | Raw ECDSA recovery succeeded |
+| `ownerMatches` | `boolean` | Recovered owner == declared owner |
+| `identifierMatches` | `boolean` | Chunk identifier == keccak256(topic ‖ feedIndex) |
+| `feedIndex` | `number` | Integer index of the feed slot |
+| `identifier` | `string` | Computed identifier (32-byte hex) |
 | `owner` | `string` | Recovered Ethereum address |
-| `dataReference` | `string` | Current content reference |
+| `dataReference` | `string` | Current content reference (32-byte hex) |
 | `dataUrl` | `string` | Gateway URL for the content |
+
+### `verifyRawChunk(raw, reference)` — unit-testable
+
+```typescript
+import { verifyRawChunk, computeCACReference } from "@/lib/swarm/verified-fetch";
+
+// Build a CAC chunk in memory and verify it (no network)
+const payload = new TextEncoder().encode("hello");
+const span = new Uint8Array(8);
+span[0] = payload.length;
+const raw = new Uint8Array([...span, ...payload]);
+const reference = computeCACReference(raw);
+
+verifyRawChunk(raw, reference).verified  // true
+raw[9] ^= 0x01;
+verifyRawChunk(raw, reference).verified  // false — tamper detected
+```
+
+### `feedIndexToBytes(index)` / `parseFeedIndexHex(hex)`
+
+Encode/decode feed indices as 8-byte big-endian values, matching the `swarm-feed-index` header format used by the Bee API.
+
+```typescript
+import { feedIndexToBytes, parseFeedIndexHex } from "@/lib/swarm/verified-fetch";
+
+feedIndexToBytes(1)          // Uint8Array [0,0,0,0,0,0,0,1]
+parseFeedIndexHex("0000000000000001")  // 1
+```
+
+## Tests
+
+```bash
+# Unit tests only (no network required)
+SKIP_LIVE_TESTS=1 npm test
+
+# Full suite including live bzz.limo integration tests
+npm test
+```
+
+Unit tests construct valid CAC chunks in memory and verify that single-byte tampering of either the payload or span causes `verified: false` — proving the BMT hash covers the entire chunk.
+
+Live tests upload a fresh KV entry to bzz.limo, then verify:
+- `verifiedFetch` correctly identifies CAC and SOC chunk types
+- BMT hash matches for immutable data chunks
+- ECDSA signature recovery returns the correct owner for feed SOC chunks
+- `verifiedFetchFeed` returns `ownerMatches: true` and `identifierMatches: true` with a freshly uploaded feed
 
 ## REST API
 
@@ -133,22 +203,24 @@ GET /api/swarm/verify/{64-char-reference}
 | Scenario | Support |
 |----------|---------|
 | Single-chunk files (≤ 4 096 bytes payload) | ✅ Full BMT verification |
-| Feed updates (SOC, any size payload) | ✅ ECDSA signature verification |
-| Multi-chunk files (> 4 096 bytes) | ⚠️ Out of scope — requires chunk tree traversal |
+| Sequence feed updates (SOC) | ✅ Strict ECDSA + owner + identifier verification |
+| Multi-chunk files (> 4 096 bytes) | ❌ Not supported — requires chunk tree traversal |
 | Browser support | ✅ Uses only `fetch()` and `cafe-utility` |
 | Node.js support | ✅ |
 
-Multi-chunk support requires walking the intermediate chunk tree. The architecture is the same (each node chunk is itself a CAC), but the traversal adds complexity. Single-chunk verification is sufficient for most KV-store values, feed payloads, and small JSON blobs.
+Multi-chunk support requires walking the intermediate chunk tree. The architecture is the same (each node chunk is itself a CAC), but the traversal adds significant complexity. Single-chunk verification is sufficient for KV-store values, feed payloads, and small JSON blobs.
 
 ## Trust model
 
 ```
-Traditional:  App → Gateway → Data        (trust the gateway)
+Traditional:    App → Gateway → Data              (trust the gateway)
 verified-fetch: App → Gateway → recompute hash → compare to reference
-                                           (trust the math)
+                                                   (trust the math)
 ```
 
-A tampered byte in the chunk payload changes the BMT root hash, which changes the chunk address — the verification will fail. A forged SOC signature cannot be produced without the owner's private key — the ECDSA recovery will return a wrong address.
+**CAC tamper detection**: A tampered payload byte changes the BMT root hash, which changes the chunk address — verification fails.
+
+**SOC tamper detection**: A forged SOC signature cannot be produced without the owner's private key — ECDSA recovery returns the wrong address. Additionally, computing the expected SOC address deterministically from (owner, topic, index) means a gateway cannot substitute a different feed slot.
 
 ## Real-world use in SmartJobs
 
@@ -160,13 +232,17 @@ const put = await kv.put("job:abc:review", reviewResult);
 // → dataReference: "da04a66c..."   (CAC, content hash)
 // → feedReference: "abbfb268..."   (SOC, signed feed update)
 
-// Verify (client-side, no node required)
+// Verify immutable data (client-side, no node required)
 const check = await verifiedFetch("https://bzz.limo", put.dataReference);
-check.verified  // true — the review result is cryptographically authentic
+check.verified  // true — review result is cryptographically authentic
 
-const feedCheck = await verifiedFetch("https://bzz.limo", put.feedReference);
-feedCheck.verified  // true — the feed update is signed by the store owner
-feedCheck.owner     // "0xf39fd6e5..." — the SmartJobs backend key
+// Verify the feed slot (strict: owner + identifier + signature)
+const topicHex = createHash("sha256").update("job:abc:review").digest("hex");
+const feedCheck = await verifiedFetchFeed("https://bzz.limo", ownerAddress, topicHex);
+feedCheck.verified            // true
+feedCheck.ownerMatches        // true — signed by the SmartJobs backend key
+feedCheck.identifierMatches   // true — correct (owner, topic, index) triple
+feedCheck.dataReference       // "da04a66c..." — matches put.dataReference
 ```
 
-This gives clients and freelancers an independent, trustless way to verify that the AI review stored on-chain has not been altered.
+This gives clients and freelancers an independent, trustless way to verify that the AI review stored on-chain has not been altered and was signed by the correct backend.

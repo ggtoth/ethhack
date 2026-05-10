@@ -7,8 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ensureSepoliaNetwork,
   getEthereumProvider,
+  getWalletErrorMessage,
   SEPOLIA_CHAIN_ID_DECIMAL,
   type EthereumProvider,
+  waitForTransactionReceipt,
 } from "@/lib/wallet/ethereum";
 
 type JobRecord = {
@@ -165,19 +167,16 @@ export function UsdtPaymentCard() {
 
       setState({ status: "confirming-ledger", txHash });
 
+      await waitForTransactionReceipt(provider, txHash);
       const confirmed = await confirmFunding(prepared, record, from, txHash);
       setRecord(confirmed);
       setState({ status: "funded", txHash });
       router.refresh();
     } catch (error) {
-      const raw = error as { message?: string; code?: number };
-      const msg =
-        error instanceof Error
-          ? error.message
-          : typeof raw?.message === "string"
-            ? raw.message
-            : `MetaMask error code ${String(raw?.code ?? "unknown")} — check the MetaMask popup and try again.`;
-      setState({ status: "error", message: msg });
+      setState({
+        status: "error",
+        message: getWalletErrorMessage(error, "Could not fund escrow."),
+      });
     }
   }
 

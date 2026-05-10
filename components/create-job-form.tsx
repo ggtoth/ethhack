@@ -6,8 +6,10 @@ import { useMemo, useState } from "react";
 import {
   ensureSepoliaNetwork,
   getEthereumProvider,
+  getWalletErrorMessage,
   SEPOLIA_CHAIN_ID_DECIMAL,
   type EthereumProvider,
+  waitForTransactionReceipt,
 } from "@/lib/wallet/ethereum";
 
 const ETH_USD_RATE = 3500;
@@ -151,16 +153,14 @@ export function CreateJobForm() {
 
       setState({ status: "recording_ledger", txHash });
 
+      await waitForTransactionReceipt(provider, txHash);
       await confirmFunding(prepared, payload, from, txHash);
       setState({ status: "funded", jobId: payload.id, txHash });
       router.push(`/my-jobs?job=${encodeURIComponent(payload.id)}`);
     } catch (error) {
       setState({
         status: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Could not create and fund the job.",
+        message: getWalletErrorMessage(error, "Could not create and fund the job."),
       });
     }
   }

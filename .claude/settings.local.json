@@ -16,7 +16,10 @@
       "Bash(git fetch *)",
       "Bash(git merge *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(dir /s /b node_modules\\\\@ethersphere\\\\bee-js\\\\dist\\\\*.js)",
+      "Bash(npm run *)",
+      "Bash(SKIP_LIVE_TESTS=1 node --import tsx/esm --test tests/verified-fetch.test.ts)"
     ]
   }
 }

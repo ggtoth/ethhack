@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getAddress } from "viem";
 
-import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
+import {
+  assertTransactionCanExecute,
+  ensureSepoliaNetwork,
+  getEthereumProvider,
+  getWalletErrorMessage,
+  waitForTransactionReceipt,
+} from "@/lib/wallet/ethereum";
 
 type JobLifecycleActionsProps = {
   job: {
@@ -77,17 +83,26 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
         throw new Error("Escrow lock could not be prepared.");
       }
 
+      const transaction = {
+        from: freelancerWalletAddress,
+        to: prepared.transaction.to,
+        value: prepared.transaction.value ?? "0x0",
+        data: prepared.transaction.data,
+      };
+
+      await assertTransactionCanExecute(
+        provider,
+        transaction,
+        "Escrow lock would fail on-chain.",
+      );
+
       const transactionHash = await provider.request<string>({
         method: "eth_sendTransaction",
-        params: [
-          {
-            from: freelancerWalletAddress,
-            to: prepared.transaction.to,
-            value: prepared.transaction.value ?? "0x0",
-            data: prepared.transaction.data,
-          },
-        ],
+        params: [transaction],
       });
+
+      setState({ status: "working", label: "Waiting for confirmation..." });
+      await waitForTransactionReceipt(provider, transactionHash);
 
       await postJson(`/escrow-contracts/${contract.id}/onchain/confirm`, {
         action: "lock",
@@ -101,7 +116,7 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
     } catch (error) {
       setState({
         status: "error",
-        message: error instanceof Error ? error.message : "Could not lock escrow.",
+        message: getWalletErrorMessage(error, "Could not lock escrow."),
       });
     }
   }
@@ -150,17 +165,26 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
         throw new Error("Escrow release could not be prepared.");
       }
 
+      const transaction = {
+        from,
+        to: prepared.transaction.to,
+        value: prepared.transaction.value ?? "0x0",
+        data: prepared.transaction.data,
+      };
+
+      await assertTransactionCanExecute(
+        provider,
+        transaction,
+        "Escrow release would fail on-chain.",
+      );
+
       const transactionHash = await provider.request<string>({
         method: "eth_sendTransaction",
-        params: [
-          {
-            from,
-            to: prepared.transaction.to,
-            value: prepared.transaction.value ?? "0x0",
-            data: prepared.transaction.data,
-          },
-        ],
+        params: [transaction],
       });
+
+      setState({ status: "working", label: "Waiting for confirmation..." });
+      await waitForTransactionReceipt(provider, transactionHash);
 
       await postJson(`/escrow-contracts/${contract.id}/onchain/confirm`, {
         action: "release",
@@ -173,7 +197,7 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
     } catch (error) {
       setState({
         status: "error",
-        message: error instanceof Error ? error.message : "Could not release escrow.",
+        message: getWalletErrorMessage(error, "Could not release escrow."),
       });
     }
   }
@@ -187,30 +211,30 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
             contract.id,
           )}`}
         >
-          Open job
+          Add payment
         </Link>
       )}
 
       {contract?.status === "funded" && (
         <button className={buttonClass} type="button" onClick={lockEscrow}>
-          Accept job
+          Accept work
         </button>
       )}
 
       {(contract?.status === "locked" || job.status === "in_progress") && (
         <Link className={buttonClass} href={`/submit-work?job=${job.id}`}>
-          Submit work
+          Submit delivery
         </Link>
       )}
 
       {(contract?.status === "release_requested" || job.status === "ai_reviewed") && (
         <button className={buttonClass} type="button" onClick={releaseEscrow}>
-          Release funds
+          Approve payout
         </button>
       )}
 
       <Link className={secondaryClass} href={`/ai-review?job=${job.id}`}>
-        Review context
+        View files
       </Link>
 
       {state.status === "working" && (

@@ -14,7 +14,7 @@
  *   await kv.delete('user:123')
  */
 
-import { Bee, PrivateKey, NULL_STAMP, BatchId, type Topic, type Reference } from "@ethersphere/bee-js";
+import { Bee, PrivateKey, NULL_STAMP, BatchId, Topic, type Reference } from "@ethersphere/bee-js";
 import { createHash } from "crypto";
 
 const INDEX_KEY = "__swarm_kv_index_v1__";
@@ -198,7 +198,6 @@ export class SwarmKV {
 // --- Helpers ---
 
 function keyToTopic(key: string): Topic {
-  const { Topic } = require("@ethersphere/bee-js");
   const hash = createHash("sha256").update(key).digest("hex");
   return new Topic(hash);
 }
