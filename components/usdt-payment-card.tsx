@@ -285,7 +285,7 @@ export function UsdtPaymentCard() {
                   Funded
                 </p>
                 <p className="mt-1.5 text-[13px] leading-5 text-[var(--text-secondary)]">
-                  Escrow is live on Sepolia. Go to My Jobs and click
+                  Escrow is live on Sepolia. Go to Find a job and click
                   <strong className="text-[var(--text-primary)]"> Accept job</strong> to lock in as freelancer.
                 </p>
               </div>
@@ -339,9 +339,9 @@ export function UsdtPaymentCard() {
           ) : (
             <Link
               className="inline-flex h-11 w-full items-center justify-center rounded-[12px] bg-[var(--button)] px-6 text-[13px] font-black text-[var(--button-text)] transition hover:opacity-90"
-              href="/my-jobs"
+              href="/find-job"
             >
-              Go to My Jobs → Accept job
+              Find a job and accept
             </Link>
           )}
         </aside>

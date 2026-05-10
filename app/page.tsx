@@ -11,14 +11,14 @@ export default function Home() {
     {
       title: "Accept job",
       body: "A freelancer picks up the funded job and locks it to their wallet.",
-      action: "Browse jobs",
-      href: "/browse-jobs",
+      action: "Find a job",
+      href: "/find-job",
     },
     {
       title: "Submit work",
       body: "The freelancer uploads previews, submits the source package, and requests release.",
-      action: "Open jobs",
-      href: "/my-jobs",
+      action: "Find a job",
+      href: "/find-job",
     },
     {
       title: "Review and release",
@@ -50,7 +50,7 @@ export default function Home() {
           </Link>
           <Link
             className="inline-flex h-[50px] flex-1 items-center justify-center rounded-[10px] border border-[var(--border-strong)] bg-transparent px-9 text-[15px] font-black text-[var(--text-primary)] transition hover:bg-[var(--surface)] sm:w-40 sm:flex-none"
-            href="/browse-jobs"
+            href="/find-job"
           >
             Jobs
           </Link>

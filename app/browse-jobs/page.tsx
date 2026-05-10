@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EnsAddress } from "@/components/ens-address";
 import { listDummyEscrowContracts, listDummyJobs } from "@/lib/workflow/dummy-endpoints";
 
 export const dynamic = "force-dynamic";
@@ -25,19 +26,25 @@ export default function BrowseJobsPage() {
         </p>
 
         <div className="mt-6 grid gap-3">
-          {jobs.length === 0 && (
+          {jobs.filter((job) => {
+            const contract = contracts.get(job.id);
+            return contract?.status === "funded" || contract?.status === "locked" || contract?.status === "release_requested";
+          }).length === 0 && (
             <article className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-6 text-[14px] leading-6 text-[var(--text-secondary)] shadow-[var(--shadow-card)]">
-              No jobs are in the live ledger yet. Create a job, fund escrow, and it will
+              No funded jobs are available yet. Create a job, fund escrow, and it will
               appear here for freelancers.
             </article>
           )}
 
-          {jobs.map((job) => {
+          {jobs.filter((job) => {
+            const contract = contracts.get(job.id);
+            return contract?.status === "funded" || contract?.status === "locked" || contract?.status === "release_requested";
+          }).map((job) => {
             const contract = contracts.get(job.id);
             const href =
               contract?.status === "locked" || contract?.status === "release_requested"
                 ? `/submit-work?job=${encodeURIComponent(job.id)}`
-                : "/my-jobs";
+                : "/find-job";
 
             return (
               <article
@@ -72,6 +79,11 @@ export default function BrowseJobsPage() {
                     <span className="rounded-full bg-[var(--surface-strong)] px-2.5 py-1">
                       {job.assignedTo ? "Assigned" : "Unassigned"}
                     </span>
+                    {contract?.clientWalletAddress && (
+                      <span className="rounded-full bg-[var(--surface-strong)] px-2.5 py-1 normal-case">
+                        Client: <EnsAddress address={contract.clientWalletAddress} />
+                      </span>
+                    )}
                   </div>
                 </div>
 

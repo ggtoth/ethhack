@@ -31,8 +31,8 @@ export type Job = {
 export const navItems = [
   { href: "/", label: "Home" },
   { href: "/how-it-works", label: "How it works" },
-  { href: "/browse-jobs", label: "Browse Jobs" },
   { href: "/post-job", label: "Post a Job" },
+  { href: "/find-job", label: "Find a Job" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/my-jobs", label: "My Jobs" },
   { href: "/messages", label: "Messages" },

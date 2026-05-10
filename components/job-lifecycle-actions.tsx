@@ -6,7 +6,6 @@ import { useState } from "react";
 import { getAddress } from "viem";
 
 import {
-  assertTransactionCanExecute,
   ensureSepoliaNetwork,
   getEthereumProvider,
   getWalletErrorMessage,
@@ -68,6 +67,16 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
           `Connect the accepted freelancer wallet (${contract.freelancerWalletAddress}) before continuing.`,
         );
       }
+
+      if (
+        contract.clientWalletAddress &&
+        getAddress(freelancerWalletAddress) === getAddress(contract.clientWalletAddress)
+      ) {
+        throw new Error(
+          "Switch to a different wallet account in MetaMask — the freelancer and client cannot be the same address.",
+        );
+      }
+
       const normalizedFreelancerWalletAddress = getAddress(freelancerWalletAddress);
 
       await ensureSepoliaNetwork(provider);
@@ -90,12 +99,6 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
         data: prepared.transaction.data,
       };
 
-      await assertTransactionCanExecute(
-        provider,
-        transaction,
-        "Escrow lock would fail on-chain.",
-      );
-
       const transactionHash = await provider.request<string>({
         method: "eth_sendTransaction",
         params: [transaction],
@@ -112,7 +115,7 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
 
       setState({ status: "success", message: "Job accepted and escrow locked to your wallet." });
       onSuccess?.();
-      router.refresh();
+      router.push(`/submit-work?job=${job.id}`);
     } catch (error) {
       setState({
         status: "error",
@@ -172,12 +175,6 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
         data: prepared.transaction.data,
       };
 
-      await assertTransactionCanExecute(
-        provider,
-        transaction,
-        "Escrow release would fail on-chain.",
-      );
-
       const transactionHash = await provider.request<string>({
         method: "eth_sendTransaction",
         params: [transaction],
@@ -233,10 +230,6 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
         </button>
       )}
 
-      <Link className={secondaryClass} href={`/ai-review?job=${job.id}`}>
-        View files
-      </Link>
-
       {state.status === "working" && (
         <span className="text-[12px] font-bold text-[var(--text-secondary)]">
           {state.label}
@@ -254,8 +247,6 @@ export function JobLifecycleActions({ contract, job, onSuccess }: JobLifecycleAc
 
 const buttonClass =
   "inline-flex h-10 items-center rounded-[8px] bg-[var(--accent)] px-4 text-[12px] font-bold text-[var(--accent-contrast)]";
-const secondaryClass =
-  "inline-flex h-10 items-center rounded-[8px] border border-[var(--border-strong)] px-4 text-[12px] font-bold text-[var(--text-primary)]";
 
 async function postJson(url: string, body: Record<string, unknown>) {
   const response = await fetch(url, {

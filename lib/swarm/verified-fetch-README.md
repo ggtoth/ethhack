@@ -15,15 +15,25 @@ Every chunk on Swarm has an address that **is** its cryptographic hash. By recom
 ## Quick start
 
 ```typescript
-import { verifiedFetch, verifiedFetchFeed } from "@/lib/swarm/verified-fetch";
+import {
+  verifiedFetch,
+  verifiedFetchFile,
+  verifiedFetchFeed,
+} from "@/lib/swarm/verified-fetch";
 
-// Immutable content (CAC — Content Addressed Chunk)
-const result = await verifiedFetch("https://bzz.limo", "da04a66c...");
+// Complete immutable file (single-chunk or multi-chunk)
+const file = await verifiedFetchFile("https://bzz.limo", "da04a66c...");
 
-result.verified    // true — BMT hash recomputed and matches reference
-result.chunkType   // "CAC"
-result.json        // { verdict: "MATCH", score: 92 }
-result.text        // raw UTF-8 if not JSON
+file.verified    // true — every CAC chunk in the tree verified
+file.chunkCount  // 1 for small files, >1 for multi-chunk files
+file.data        // Uint8Array with the assembled file bytes
+file.json        // parsed JSON if the assembled bytes are JSON
+
+// Raw chunk-level verification (CAC or SOC)
+const chunk = await verifiedFetch("https://bzz.limo", "da04a66c...");
+
+chunk.verified    // true — BMT hash or SOC signature verified
+chunk.chunkType   // "CAC" or "SOC"
 
 // Mutable feed (SOC — Single Owner Chunk, strict verification)
 const feed = await verifiedFetchFeed("https://bzz.limo", ownerAddress, topicHex);
@@ -59,6 +69,26 @@ BMT (Binary Merkle Tree):
 
 Verification: recompute the address and compare to the reference. A mismatch proves the gateway tampered with the data.
 
+### Multi-chunk files
+
+For files larger than 4096 bytes, Bee stores a chunk tree. The root chunk is a
+CAC whose payload is a list of 32-byte child references. Each child is also a
+CAC, either another intermediate node or a leaf containing file bytes.
+
+`verifiedFetchFile()` walks this tree:
+
+```
+1. Fetch root chunk via /chunks/{reference}
+2. Verify root CAC with BMT
+3. If span > 4096, read child references from payload
+4. Recursively fetch and verify every child chunk
+5. Concatenate verified leaf payloads and trim to the root span
+```
+
+This proves both the structure and the bytes of the assembled file. A tampered
+intermediate node, leaf, span, or child reference changes that chunk's BMT hash,
+so verification fails.
+
 ### SOC — Single Owner Chunk (mutable feed updates)
 
 ```
@@ -91,7 +121,31 @@ A valid, fully verified SOC proves:
 
 ## API
 
+### `verifiedFetchFile(gatewayUrl, reference)`
+
+Use this for immutable file reads. It verifies complete files, including
+multi-chunk files, and returns assembled bytes.
+
+```typescript
+const result: VerifiedFileResult = await verifiedFetchFile(
+  "https://bzz.limo",
+  "64-char-root-reference"
+);
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `verified` | `boolean` | `true` iff every chunk in the tree verifies |
+| `data` | `Uint8Array` | Assembled file bytes |
+| `chunkCount` | `number` | Number of chunks fetched and verified |
+| `text` | `string \| null` | UTF-8 decoded assembled content |
+| `json` | `unknown \| null` | Parsed JSON if the assembled content is JSON |
+| `verifiedAt` | `string` | ISO timestamp |
+
 ### `verifiedFetch(gatewayUrl, reference)`
+
+Use this when you specifically want to inspect one raw Swarm chunk. For whole
+files, prefer `verifiedFetchFile()`.
 
 ```typescript
 const result: VerifiedFetchResult = await verifiedFetch(
@@ -174,9 +228,15 @@ npm test
 
 Unit tests construct valid CAC chunks in memory and verify that single-byte tampering of either the payload or span causes `verified: false` — proving the BMT hash covers the entire chunk.
 
+Multi-chunk unit tests build an in-memory chunk tree and verify:
+- valid multi-chunk trees assemble into the expected bytes
+- leaf payload tampering fails
+- root span tampering fails
+
 Live tests upload a fresh KV entry to bzz.limo, then verify:
 - `verifiedFetch` correctly identifies CAC and SOC chunk types
 - BMT hash matches for immutable data chunks
+- `verifiedFetchFile` verifies single-chunk and real multi-chunk Bee uploads
 - ECDSA signature recovery returns the correct owner for feed SOC chunks
 - `verifiedFetchFeed` returns `ownerMatches: true` and `identifierMatches: true` with a freshly uploaded feed
 
@@ -203,12 +263,15 @@ GET /api/swarm/verify/{64-char-reference}
 | Scenario | Support |
 |----------|---------|
 | Single-chunk files (≤ 4 096 bytes payload) | ✅ Full BMT verification |
+| Multi-chunk files (> 4 096 bytes) | ✅ Full chunk-tree traversal + BMT verification |
 | Sequence feed updates (SOC) | ✅ Strict ECDSA + owner + identifier verification |
-| Multi-chunk files (> 4 096 bytes) | ❌ Not supported — requires chunk tree traversal |
 | Browser support | ✅ Uses only `fetch()` and `cafe-utility` |
 | Node.js support | ✅ |
 
-Multi-chunk support requires walking the intermediate chunk tree. The architecture is the same (each node chunk is itself a CAC), but the traversal adds significant complexity. Single-chunk verification is sufficient for KV-store values, feed payloads, and small JSON blobs.
+Current intentional limits:
+- The file verifier expects a raw Swarm root chunk reference and fetches via `/chunks/{reference}`.
+- It does not yet resolve `/bzz/{manifest}/{path}` manifests by path.
+- Gateway fallback/retry is left to callers for now; pass the gateway you want to trustlessly verify through.
 
 ## Trust model
 
@@ -233,7 +296,7 @@ const put = await kv.put("job:abc:review", reviewResult);
 // → feedReference: "abbfb268..."   (SOC, signed feed update)
 
 // Verify immutable data (client-side, no node required)
-const check = await verifiedFetch("https://bzz.limo", put.dataReference);
+const check = await verifiedFetchFile("https://bzz.limo", put.dataReference);
 check.verified  // true — review result is cryptographically authentic
 
 // Verify the feed slot (strict: owner + identifier + signature)

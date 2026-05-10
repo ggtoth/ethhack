@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { getAddress } from "viem";
 
+import { EnsAddress } from "@/components/ens-address";
 import type { ReviewResult } from "@/lib/review/schema";
 import { ensureSepoliaNetwork, getEthereumProvider } from "@/lib/wallet/ethereum";
 
@@ -32,6 +33,7 @@ type JobRecord = {
   contract: {
     id: string;
     status: string;
+    clientWalletAddress: string | null;
     freelancerWalletAddress: string | null;
   };
 };
@@ -54,12 +56,11 @@ export function DeveloperSubmitWorkspace() {
   );
   const [projectFiles, setProjectFiles] = useState<File[]>([]);
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
   const [workSummary, setWorkSummary] = useState(
     "Built the responsive landing page, connected the contact section, and included desktop/mobile screenshots.",
   );
-  const [collaborationReview, setCollaborationReview] = useState(
+  const [buyerRating, setBuyerRating] = useState(5);
+  const [buyerComment, setBuyerComment] = useState(
     "Clear brief, quick answers, smooth handoff.",
   );
   const [review, setReview] = useState<ReviewResult | null>(null);
@@ -99,12 +100,6 @@ export function DeveloperSubmitWorkspace() {
         }
 
         setRecord(payload);
-        setPreviewUrl(payload.job.previewFile?.url ?? "");
-        setSourceUrl(
-          payload.job.submittedSourceFiles[0]?.url ??
-            payload.job.finalFile?.url ??
-            "",
-        );
         setCompleted(getCompletedSteps(payload.job.status));
         setMessage(
           payload.contract.status === "locked" || payload.contract.status === "release_requested"
@@ -146,18 +141,9 @@ export function DeveloperSubmitWorkspace() {
     const jobId = record.job.id;
     const contractId = record.contract.id;
     const submittedSourceFiles = makeStoredFiles(projectFiles, jobId, "delivery");
-    const sourceFiles = submittedSourceFiles.length > 0
-      ? submittedSourceFiles
-      : sourceUrl.trim()
-        ? [makeUrlFile(jobId, "source", sourceUrl)]
-        : [];
     const previewAssets = makeStoredFiles(previewFiles, jobId, "preview");
-    const previewFile = previewUrl.trim()
-      ? makeUrlFile(jobId, "preview", previewUrl)
-      : previewAssets[0];
-    const finalFile = sourceUrl.trim()
-      ? makeUrlFile(jobId, "source", sourceUrl)
-      : sourceFiles[0];
+    const previewFile = previewAssets[0];
+    const finalFile = submittedSourceFiles[0];
 
     try {
       const submitResponse = await fetch(`/jobs/${jobId}/submit`, {
@@ -166,8 +152,8 @@ export function DeveloperSubmitWorkspace() {
         body: JSON.stringify({
           previewFile,
           finalFile,
-          submittedSourceFiles: sourceFiles,
-          submissionNotes: makeSubmissionNotes(workSummary, collaborationReview),
+          submittedSourceFiles,
+          submissionNotes: makeSubmissionNotes(workSummary, buyerRating, buyerComment),
           requestReleaseOnChain: false,
         }),
       });
@@ -354,28 +340,6 @@ export function DeveloperSubmitWorkspace() {
 
           <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
             <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Preview URL
-            </span>
-            <input
-              className="h-10 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[14px] font-bold outline-none"
-              value={previewUrl}
-              onChange={(event) => setPreviewUrl(event.target.value)}
-            />
-          </label>
-
-          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
-            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-              Source URL
-            </span>
-            <input
-              className="h-10 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[14px] font-bold outline-none"
-              value={sourceUrl}
-              onChange={(event) => setSourceUrl(event.target.value)}
-            />
-          </label>
-
-          <label className="grid gap-2 rounded-[12px] bg-[var(--surface-strong)] p-3">
-            <span className="text-[11px] font-black uppercase text-[var(--text-muted)]">
               What did you complete?
             </span>
             <textarea
@@ -385,26 +349,45 @@ export function DeveloperSubmitWorkspace() {
             />
           </label>
 
-          <label className="grid gap-3 rounded-[12px] bg-[var(--surface-strong)] p-3">
-            <span className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--text-primary)] text-[12px] font-black text-[var(--background)]">
-                  CL
-                </span>
-                <span>
-                  <span className="block text-[13px] font-black">Buyer context</span>
-                  <span className="block text-[11px] font-black uppercase text-[var(--text-muted)]">
-                    Handoff notes
-                  </span>
-                </span>
-              </span>
-            </span>
+          <div className="rounded-[14px] border border-amber-200/80 bg-gradient-to-br from-amber-50 via-[var(--surface)] to-[var(--surface-strong)] p-4 shadow-[0_16px_40px_rgba(245,158,11,0.10)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <BuyerIdentity address={record?.contract.clientWalletAddress ?? null} />
+              </div>
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-200 bg-white/70 px-3 py-1.5 text-[12px] font-black text-amber-700">
+                <span>{buyerRating}.0</span>
+                <span className="text-amber-400">★</span>
+              </div>
+            </div>
+
+            <div
+              className="mt-4 flex w-fit items-center gap-1 rounded-[12px] border border-amber-200 bg-white/70 p-1.5"
+              aria-label={`${buyerRating} out of 5 stars`}
+            >
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <button
+                  aria-label={`${rating} star${rating === 1 ? "" : "s"}`}
+                  className={`grid h-10 w-10 place-items-center rounded-[10px] text-[25px] leading-none transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                    rating <= buyerRating
+                      ? "text-amber-400 drop-shadow-[0_2px_3px_rgba(245,158,11,0.25)]"
+                      : "text-amber-200"
+                  }`}
+                  key={rating}
+                  type="button"
+                  onClick={() => setBuyerRating(rating)}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
             <textarea
-              className="min-h-20 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[14px] leading-6 outline-none"
-              value={collaborationReview}
-              onChange={(event) => setCollaborationReview(event.target.value)}
+              className="mt-3 min-h-16 w-full rounded-[11px] border border-amber-200 bg-white/75 px-3 py-2 text-[14px] leading-6 outline-none transition placeholder:text-[var(--text-muted)] focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
+              placeholder="Short note about working with this buyer"
+              value={buyerComment}
+              onChange={(event) => setBuyerComment(event.target.value)}
             />
-          </label>
+          </div>
         </div>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -632,24 +615,50 @@ function makeStoredFiles(files: File[], jobId: string, role: string): StoredFile
   }));
 }
 
-function makeUrlFile(job: string, role: string, url: string): StoredFile {
-  const trimmed = url.trim();
-  const filename = trimmed.split("/").filter(Boolean).at(-1) || `${role}.zip`;
+function BuyerIdentity({ address }: { address: string | null }) {
+  if (address) {
+    return (
+      <>
+        <EnsAddress
+          address={address}
+          className="min-w-0 truncate text-[14px] font-black text-[var(--text-primary)]"
+          showAvatar
+        />
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+            Rate the buyer
+          </p>
+          <p className="mt-0.5 text-[12px] text-[var(--text-secondary)]">
+            How was the collaboration?
+          </p>
+        </div>
+      </>
+    );
+  }
 
-  return {
-    id: `file_${role}_${job}`,
-    url: trimmed || `smartjobs-reference://${encodeURIComponent(job)}/${role}`,
-    filename,
-  };
+  return (
+    <>
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--text-primary)] text-[12px] font-black text-[var(--background)]">
+        BY
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-[14px] font-black text-[var(--text-primary)]">Buyer</p>
+        <p className="mt-0.5 text-[12px] text-[var(--text-secondary)]">
+          How was the collaboration?
+        </p>
+      </div>
+    </>
+  );
 }
 
-function makeSubmissionNotes(workSummary: string, collaborationReview: string) {
+function makeSubmissionNotes(workSummary: string, buyerRating: number, buyerComment: string) {
   const summary = workSummary.trim();
-  const collaboration = collaborationReview.trim();
+  const comment = buyerComment.trim();
 
   return [
     summary ? `Work completed: ${summary}` : null,
-    collaboration ? `Buyer collaboration: ${collaboration}` : null,
+    `Buyer rating: ${buyerRating}/5`,
+    comment ? `Buyer comment: ${comment}` : null,
   ]
     .filter(Boolean)
     .join("\n");

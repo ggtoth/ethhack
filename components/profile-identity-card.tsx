@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { EnsAddress } from "@/components/ens-address";
+
 const badges = [
   { icon: "✓", label: "Verified", style: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   { icon: "◆", label: "Funded", style: "bg-sky-100 text-sky-800 border-sky-200" },
@@ -12,7 +14,17 @@ export function ProfileIdentityCard() {
   const [displayName, setDisplayName] = useState("My freelancer profile");
   const [editingName, setEditingName] = useState(false);
   const [copied, setCopied] = useState(false);
-  const walletAddress = "0xBae26833E6be85011f8620b24e223b908457eAe3";
+  const [walletAddress, setWalletAddress] = useState("0xBae26833E6be85011f8620b24e223b908457eAe3");
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.ethereum) return;
+    window.ethereum
+      .request<string[]>({ method: "eth_accounts" })
+      .then((accounts) => {
+        if (accounts[0]) setWalletAddress(accounts[0]);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -39,7 +51,7 @@ export function ProfileIdentityCard() {
             // eslint-disable-next-line @next/next/no-img-element
             <img alt="Profile preview" className="h-full w-full object-cover" src={imageUrl} />
           ) : (
-            <span className="text-[22px] font-black">0x</span>
+            <EnsAvatarOrFallback address={walletAddress} />
           )}
           <span className="absolute inset-x-0 bottom-0 bg-[color-mix(in_srgb,var(--background)_85%,transparent)] py-1 text-center text-[9px] font-black uppercase opacity-0 transition group-hover:opacity-100">
             Upload
@@ -67,7 +79,7 @@ export function ProfileIdentityCard() {
               type="button"
               onClick={() => setEditingName(true)}
             >
-              {displayName}
+              <EnsNameOrFallback address={walletAddress} fallback={displayName} />
             </button>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
@@ -84,7 +96,7 @@ export function ProfileIdentityCard() {
               {copied ? "Copied" : "Copy profile"}
             </button>
             <span className="rounded-full bg-[color-mix(in_srgb,var(--surface-strong)_74%,transparent)] px-3 py-1 text-[11px] font-black text-[var(--text-muted)]">
-              0xBae26...7eAe3
+              <EnsAddress address={walletAddress} />
             </span>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -117,4 +129,39 @@ export function ProfileIdentityCard() {
       </div>
     </div>
   );
+}
+
+function EnsAvatarOrFallback({ address }: { address: string }) {
+  const [avatar, setAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!address?.startsWith("0x")) return;
+    fetch(`/api/ens/${address}`)
+      .then((r) => r.json())
+      .then((d: { avatar: string | null }) => setAvatar(d.avatar))
+      .catch(() => {});
+  }, [address]);
+
+  if (avatar) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img alt="ENS avatar" className="h-full w-full object-cover" src={avatar} />
+    );
+  }
+
+  return <span className="text-[22px] font-black">0x</span>;
+}
+
+function EnsNameOrFallback({ address, fallback }: { address: string; fallback: string }) {
+  const [name, setName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!address?.startsWith("0x")) return;
+    fetch(`/api/ens/${address}`)
+      .then((r) => r.json())
+      .then((d: { name: string | null }) => setName(d.name))
+      .catch(() => {});
+  }, [address]);
+
+  return <>{name ?? fallback}</>;
 }

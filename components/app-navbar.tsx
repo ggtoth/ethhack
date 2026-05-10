@@ -10,8 +10,11 @@ const navItems = [
   { href: "/", label: "Start" },
   { href: "/wallet", label: "Wallet" },
   { href: "/post-job", label: "Create" },
-  { href: "/browse-jobs", label: "Browse jobs" },
+  { href: "/find-job", label: "Find a job" },
   { href: "/my-jobs", label: "My jobs" },
+  { href: "/profile?view=customer", label: "Client" },
+  { href: "/profile?view=freelancer", label: "Freelancer" },
+  { href: "/messages", label: "Inbox", badge: "B" },
 ];
 
 export function AppNavbar() {
@@ -55,6 +58,12 @@ export function AppNavbar() {
                 key={item.href}
               >
                 <span>{item.label}</span>
+                {"badge" in item && item.badge && (
+                  <span className="relative grid h-5 w-5 place-items-center rounded-full bg-[#f45b63] text-[10px] font-black text-white">
+                    {item.badge}
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-[var(--background)] bg-[#20c878]" />
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -92,6 +101,12 @@ export function AppNavbar() {
                   onClick={() => setOpen(false)}
                 >
                   <span>{item.label}</span>
+                  {"badge" in item && item.badge && (
+                    <span className="relative grid h-5 w-5 place-items-center rounded-full bg-[#f45b63] text-[10px] font-black text-white">
+                      {item.badge}
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-[var(--surface)] bg-[#20c878]" />
+                    </span>
+                  )}
                 </Link>
               );
             })}

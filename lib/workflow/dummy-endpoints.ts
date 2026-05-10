@@ -794,6 +794,7 @@ export function toJobListItem(job: DummyJob) {
     status: job.status,
     createdBy: job.createdBy,
     assignedTo: job.assignedTo,
+    createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
 }

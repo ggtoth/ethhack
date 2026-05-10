@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { describe, test, before } from "node:test";
 
+import { Bee, NULL_STAMP as BEE_NULL_STAMP } from "@ethersphere/bee-js";
 import { SwarmKV } from "@/lib/swarm/swarm-kv-lib";
 import {
   verifiedFetch,
@@ -335,6 +336,22 @@ describe("verifiedFetch — live CAC tests", { skip: SKIP_LIVE }, () => {
     assert.ok(result.json !== null);
     const json = result.json as Record<string, unknown>;
     assert.equal(json.hello, "swarm");
+  });
+
+  test("verifiedFetchFile verifies a real multi-chunk Bee upload", async () => {
+    const bee = new Bee(GATEWAY);
+    const data = new Uint8Array(9000);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = i % 251;
+    }
+
+    const upload = await bee.uploadData(BEE_NULL_STAMP, data);
+    const result = await verifiedFetchFile(GATEWAY, upload.reference.toString());
+
+    assert.equal(result.verified, true);
+    assert.ok(result.chunkCount > 1, "payload must be stored as multiple chunks");
+    assert.equal(result.data.length, data.length);
+    assert.deepEqual(result.data, data);
   });
 });
 

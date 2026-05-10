@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
+  assertTransactionCanExecute,
   ensureSepoliaNetwork,
   getEthereumProvider,
   getWalletErrorMessage,
   SEPOLIA_CHAIN_ID_DECIMAL,
-  type EthereumProvider,
   waitForTransactionReceipt,
+  type EthereumProvider,
 } from "@/lib/wallet/ethereum";
 
 const ETH_USD_RATE = 3500;
@@ -32,11 +33,18 @@ type CreatedJobPayload = {
   deadline: string;
   requirements: string;
   status: string;
+  sourceFiles?: StoredFile[];
   contract: {
     id: string;
     amount: number;
     currency: string;
   };
+};
+
+type StoredFile = {
+  id: string;
+  url: string;
+  filename: string;
 };
 
 type PreparedFunding = {
@@ -73,15 +81,43 @@ export function CreateJobForm() {
     const parsedBudget = Number(budgetUsd);
 
     if (!Number.isFinite(parsedBudget) || parsedBudget <= 0) {
-      return "0.0000";
+      return "0.000000";
     }
 
-    return (parsedBudget / ETH_USD_RATE).toFixed(4);
+    return (parsedBudget / ETH_USD_RATE).toFixed(6);
   }, [budgetUsd]);
 
   const ready = title.trim() && details.trim() && budgetUsd.trim();
   const inputClass =
     "w-full rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-[14px] font-black text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] placeholder:opacity-60 focus:border-[var(--text-primary)]";
+
+  function addReferenceFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    setAttachedFiles((currentFiles) => {
+      const seen = new Set(currentFiles.map(fileKey));
+      const nextFiles = [...currentFiles];
+
+      for (const file of files) {
+        const key = fileKey(file);
+
+        if (!seen.has(key)) {
+          seen.add(key);
+          nextFiles.push(file);
+        }
+      }
+
+      return nextFiles;
+    });
+  }
+
+  function removeReferenceFile(fileToRemove: File) {
+    setAttachedFiles((currentFiles) =>
+      currentFiles.filter((file) => fileKey(file) !== fileKey(fileToRemove)),
+    );
+  }
 
   async function createAndFund() {
     if (
@@ -102,6 +138,13 @@ export function CreateJobForm() {
         throw new Error("Enter a valid budget before continuing.");
       }
 
+      if (Number(budgetEth) === 0) {
+        throw new Error("Budget is too small — minimum $1 so the escrow has a non-zero ETH amount.");
+      }
+
+      const sourceFiles = await Promise.all(
+        attachedFiles.map((file, index) => fileToStoredFile(file, index)),
+      );
       const response = await fetch("/jobs", {
         method: "POST",
         headers: {
@@ -112,11 +155,7 @@ export function CreateJobForm() {
           description: details.trim(),
           requirements: details.trim(),
           budget: Number(budgetEth),
-          sourceFiles: attachedFiles.map((file, index) => ({
-            id: `source_${index + 1}_${file.lastModified}`,
-            url: `smartjobs-upload://${encodeURIComponent(file.name)}`,
-            filename: file.name,
-          })),
+          sourceFiles,
         }),
       });
       const payload = (await response.json()) as
@@ -149,6 +188,16 @@ export function CreateJobForm() {
       await ensureSepoliaNetwork(provider);
 
       const prepared = await prepareFunding(payload);
+      await assertTransactionCanExecute(
+        provider,
+        {
+          from,
+          to: prepared.transaction.to,
+          value: prepared.transaction.value ?? "0x0",
+          data: prepared.transaction.data,
+        },
+        "Could not fund escrow.",
+      );
       const txHash = await sendPreparedTransaction(provider, from, prepared);
 
       setState({ status: "recording_ledger", txHash });
@@ -156,7 +205,7 @@ export function CreateJobForm() {
       await waitForTransactionReceipt(provider, txHash);
       await confirmFunding(prepared, payload, from, txHash);
       setState({ status: "funded", jobId: payload.id, txHash });
-      router.push(`/my-jobs?job=${encodeURIComponent(payload.id)}`);
+      router.push(`/jobs/landing-page-implementation?job=${encodeURIComponent(payload.id)}`);
     } catch (error) {
       setState({
         status: "error",
@@ -194,7 +243,7 @@ export function CreateJobForm() {
                 </span>
                 <input
                   className={inputClass}
-                  placeholder="Landing page for my product"
+                  placeholder="Fix my checkout page"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                 />
@@ -206,7 +255,9 @@ export function CreateJobForm() {
                 </span>
                 <textarea
                   className={`${inputClass} min-h-[130px] resize-none leading-6`}
-                  placeholder={"Responsive page\nDeployed preview\nSource link"}
+                  placeholder={
+                    "Describe the problem\nWhat should the result be?\nAny must-have details"
+                  }
                   value={details}
                   onChange={(event) => setDetails(event.target.value)}
                 />
@@ -224,15 +275,18 @@ export function CreateJobForm() {
                 className="sr-only"
                 multiple
                 type="file"
-                onChange={(event) => setAttachedFiles(Array.from(event.target.files ?? []))}
+                onChange={(event) => {
+                  addReferenceFiles(Array.from(event.currentTarget.files ?? []));
+                  event.currentTarget.value = "";
+                }}
               />
               <span className="text-[13px] font-black text-[var(--text-primary)]">
-                {attachedFiles.length > 0
-                  ? `${attachedFiles.length} files selected`
-                  : "Upload files or archive"}
+                {attachedFiles.length > 0 ? "Add more files" : "Upload files or archive"}
               </span>
               <span className="text-[11px] font-black text-[var(--text-muted)]">
-                PDF, images, ZIP, RAR, 7Z, docs
+                {attachedFiles.length > 0
+                  ? `${attachedFiles.length} ${attachedFiles.length === 1 ? "file" : "files"} selected`
+                  : "PDF, images, ZIP, RAR, 7Z, docs"}
               </span>
             </label>
             {attachedFiles.length > 0 && (
@@ -245,9 +299,16 @@ export function CreateJobForm() {
                     <span className="min-w-0 truncate font-black text-[var(--text-primary)]">
                       {file.name}
                     </span>
-                    <span className="shrink-0 text-[var(--text-muted)]">
-                      {formatFileSize(file.size)}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-[var(--text-muted)]">{formatFileSize(file.size)}</span>
+                      <button
+                        className="rounded-[8px] border border-[var(--border)] px-2 py-1 text-[11px] font-black text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                        type="button"
+                        onClick={() => removeReferenceFile(file)}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -258,12 +319,6 @@ export function CreateJobForm() {
         <aside className="grid content-start gap-4">
           <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
             <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">Budget</p>
-            <div className="mt-4 grid grid-cols-2 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-1 text-[12px] font-black">
-              <span className="rounded-[9px] bg-[var(--text-primary)] px-3 py-2 text-center text-[var(--background)]">
-                USD
-              </span>
-              <span className="px-3 py-2 text-center text-[var(--text-muted)]">ETH</span>
-            </div>
             <label className="mt-4 flex items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 focus-within:border-[var(--text-primary)]">
               <span className="text-[14px] font-black text-[var(--text-muted)]">$</span>
               <input
@@ -271,8 +326,9 @@ export function CreateJobForm() {
                 inputMode="decimal"
                 placeholder="1500"
                 value={budgetUsd}
-                onChange={(event) => setBudgetUsd(event.target.value)}
+                onChange={(event) => setBudgetUsd(normalizeUsdInput(event.target.value))}
               />
+              <span className="text-[12px] font-black text-[var(--text-muted)]">USD</span>
             </label>
           </div>
 
@@ -281,12 +337,6 @@ export function CreateJobForm() {
               Summary
             </p>
             <div className="mt-4 grid gap-3 text-[12px] text-[var(--text-secondary)]">
-              <p>{title || "Job title..."}</p>
-              <p>
-                {attachedFiles.length > 0
-                  ? `${attachedFiles.length} files attached`
-                  : "No files attached"}
-              </p>
               <p className="text-[18px] font-black text-[var(--text-primary)]">
                 ${budgetDisplay} max budget
               </p>
@@ -301,9 +351,15 @@ export function CreateJobForm() {
             </p>
           )}
 
+          {state.status === "confirming_wallet" && (
+            <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[12px] font-black leading-5 text-[var(--text-primary)]">
+              Payment is not sent yet. Open MetaMask and confirm the escrow transaction.
+            </p>
+          )}
+
           {state.status === "recording_ledger" && (
-            <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[12px] font-black text-[var(--text-primary)]">
-              Recording funding transaction: {state.txHash}
+            <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-[12px] font-black leading-5 text-[var(--text-primary)]">
+              Payment sent. Saving escrow.
             </p>
           )}
 
@@ -323,7 +379,7 @@ export function CreateJobForm() {
               : state.status === "confirming_wallet"
                 ? "Confirm in wallet..."
                 : state.status === "recording_ledger"
-                  ? "Recording..."
+                  ? "Saving..."
                   : state.status === "funded"
                     ? "Funded"
                     : "Create job & fund escrow"}
@@ -344,6 +400,21 @@ function formatFileSize(size: number) {
   }
 
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function fileKey(file: File) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function normalizeUsdInput(value: string) {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole = "", ...fractionParts] = cleaned.split(".");
+
+  if (fractionParts.length === 0) {
+    return whole;
+  }
+
+  return `${whole}.${fractionParts.join("")}`;
 }
 
 function isCreatedJobPayload(value: unknown): value is CreatedJobPayload {
@@ -424,6 +495,7 @@ async function confirmFunding(
       deadline: record.deadline,
       requirements: record.requirements,
       status: record.status,
+      sourceFiles: record.sourceFiles ?? [],
       transactionHash,
       clientWalletAddress,
       escrowAddress: prepared.transaction.contractAddress,
@@ -439,4 +511,31 @@ async function confirmFunding(
   if (!response.ok) {
     throw new Error(payload.error ?? "Could not confirm funding.");
   }
+}
+
+async function fileToStoredFile(file: File, index: number): Promise<StoredFile> {
+  return {
+    id: `source_${index + 1}_${file.lastModified}`,
+    url: file.type.startsWith("image/")
+      ? await readFileAsDataUrl(file)
+      : `smartjobs-upload://${encodeURIComponent(file.name)}`,
+    filename: file.name,
+  };
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Could not read file preview."));
+    });
+    reader.addEventListener("error", () => reject(new Error("Could not read file preview.")));
+    reader.readAsDataURL(file);
+  });
 }

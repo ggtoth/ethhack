@@ -1,7 +1,43 @@
+import Link from "next/link";
+import { listDummyJobs, getDummyEscrowContractForJob } from "@/lib/workflow/dummy-endpoints";
+
 const freelancerSkills = ["Landing pages", "Next.js", "Web3 UI"];
-const customerTags = ["Mobile app", "Escrow", "AI review"];
 
 type ProfileView = "customer" | "freelancer";
+
+const customerCurrentJobs = [
+  {
+    title: "Logo refresh",
+    description: "Create a cleaner mark based on the uploaded reference image.",
+    budget: "$120",
+    due: "Jun 30, 2026",
+    status: "Waiting for developer",
+  },
+  {
+    title: "Checkout page fix",
+    description: "Fix mobile layout and make the payment button easier to understand.",
+    budget: "$240",
+    due: "Jul 4, 2026",
+    status: "In progress",
+  },
+];
+
+const customerPreviousJobs = [
+  {
+    title: "Landing page hero",
+    description: "Delivered responsive hero section and source files.",
+    budget: "$380",
+    due: "May 18, 2026",
+    status: "Completed",
+  },
+  {
+    title: "Product card UI",
+    description: "Cleaned up spacing, typography, and empty states.",
+    budget: "$90",
+    due: "May 2, 2026",
+    status: "Completed",
+  },
+];
 
 type ProfilePageProps = {
   searchParams?: Promise<{
@@ -34,74 +70,95 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
 
 function CustomerProfile() {
   return (
-    <section className="grid gap-3 lg:grid-cols-[230px_minmax(0,1fr)]">
-      <aside className="profile-card self-start rounded-[14px] p-4">
-        <div className="grid justify-items-center text-center">
-          <div className="grid h-16 w-16 place-items-center rounded-full bg-[var(--text-primary)] text-xl font-black text-[var(--background)] shadow-[0_14px_34px_rgba(15,23,42,0.1)]">
-            CL
-          </div>
-          <h1 className="mt-3 text-lg font-black">Orbit Labs</h1>
-          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-            Product client account
+    <section className="mx-auto grid w-full max-w-[1120px] gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <p className="inline-flex rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[12px] font-black uppercase tracking-wide text-[var(--text-secondary)]">
+            5.0 stars
           </p>
-          <div className="mt-3 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-[12px] font-black">
-            8 funded jobs
-          </div>
+          <p className="inline-flex rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[12px] font-black uppercase tracking-wide text-[var(--text-secondary)]">
+            {customerCurrentJobs.length} current jobs
+          </p>
         </div>
+        <a
+          className="inline-flex h-9 items-center rounded-[9px] bg-[var(--text-primary)] px-4 text-[12px] font-black uppercase text-[var(--background)]"
+          href="/post-job"
+        >
+          Create
+        </a>
+      </div>
 
-        <div className="mt-5 grid gap-2 text-[13px]">
-          <ProfileFact label="Role" value="Customer" />
-          <ProfileFact label="Spent" value="$12,800" />
-          <ProfileFact label="Wallet" value="0xA12c...9F04" />
-        </div>
-      </aside>
+      <CustomerJobSection jobs={customerCurrentJobs} title="Current jobs" />
+      <CustomerJobSection jobs={customerPreviousJobs} title="Previous jobs" />
+    </section>
+  );
+}
 
-      <div className="grid gap-3">
-        <section className="profile-card rounded-[14px] p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-                Customer wallet
+function CustomerJobSection({
+  jobs,
+  title,
+}: {
+  jobs: Array<{
+    title: string;
+    description: string;
+    budget: string;
+    due: string;
+    status: string;
+  }>;
+  title: string;
+}) {
+  return (
+    <section className="grid gap-3">
+      <p className="text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">
+        {title}
+      </p>
+      <div className="grid gap-4">
+        {jobs.map((job) => (
+          <article
+            className="grid gap-5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-5 py-5 shadow-[var(--shadow-card)] sm:grid-cols-[minmax(0,1fr)_140px_150px] sm:items-center sm:px-6"
+            key={job.title}
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-[18px] font-black text-[var(--text-primary)]">
+                  {job.title}
+                </h2>
+                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1 text-[10px] font-black uppercase text-[var(--text-muted)]">
+                  {job.status}
+                </span>
+              </div>
+              <p className="mt-1 truncate text-[13px] text-[var(--text-muted)]">
+                {job.description}
               </p>
-              <h2 className="mt-1 text-3xl font-black leading-none">$6,400</h2>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <WalletMetric label="Requested" value="$18,200" />
-              <WalletMetric label="Escrowed" value="$1,500" />
+
+            <div className="grid grid-cols-2 gap-3 border-t border-[var(--border)] pt-3 sm:block sm:border-t-0 sm:pt-0 sm:text-right">
+              <div>
+                <p className="text-[10px] font-black uppercase text-[var(--text-muted)]">
+                  Budget
+                </p>
+                <p className="mt-1 text-[14px] font-black text-[var(--text-primary)]">
+                  {job.budget}
+                </p>
+              </div>
+              <div className="sm:mt-3">
+                <p className="text-[10px] font-black uppercase text-[var(--text-muted)]">
+                  Due
+                </p>
+                <p className="mt-1 text-[14px] font-black text-[var(--text-primary)]">
+                  {job.due}
+                </p>
+              </div>
             </div>
-          </div>
-        </section>
 
-        <section className="profile-card rounded-[14px] p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-                Active request
-              </p>
-              <h2 className="mt-2 max-w-[500px] text-2xl font-black leading-tight">
-                Mobile app MVP design
-              </h2>
-            </div>
-            <div className="rounded-[12px] bg-[var(--text-primary)] px-4 py-3 text-[var(--background)]">
-              <p className="text-[11px] font-black uppercase opacity-60">Budget</p>
-              <p className="mt-1 text-xl font-black leading-none">1,500 USDT</p>
-              <p className="mt-2 text-[11px] font-black uppercase opacity-70">Funded</p>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {customerTags.map((tag) => (
-              <Tag key={tag}>{tag}</Tag>
-            ))}
-          </div>
-        </section>
-
-        <CustomerReviews />
-
-        <section className="grid gap-3 sm:grid-cols-2">
-          <SmallCard eyebrow="Requests" title="12 posted" body="3 active, 9 completed" />
-          <StatusCard rows={[["Escrow funded", true], ["Work submitted", false]]} />
-        </section>
+            <button
+              className="inline-flex h-11 w-full items-center justify-center rounded-[11px] bg-[var(--text-primary)] px-4 text-[13px] font-black text-[var(--background)] sm:w-auto"
+              type="button"
+            >
+              View
+            </button>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -161,7 +218,12 @@ function FreelancerReview({
   );
 }
 
-function FreelancerProfile({ showPayout }: { showPayout: boolean }) {
+async function FreelancerProfile({ showPayout }: { showPayout: boolean }) {
+  const allJobs = listDummyJobs();
+  const activeJobs = allJobs
+    .filter((j) => j.status === "in_progress" || j.status === "submitted" || j.status === "ai_reviewed")
+    .map((j) => ({ job: j, contract: getDummyEscrowContractForJob(j.id) }));
+
   return (
     <section className="grid gap-3 lg:grid-cols-[230px_minmax(0,1fr)]">
       <aside className="profile-card self-start rounded-[14px] p-4">
@@ -214,29 +276,47 @@ function FreelancerProfile({ showPayout }: { showPayout: boolean }) {
         </section>
 
         <section className="profile-card rounded-[14px] p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
-                Active work
-              </p>
-              <h2 className="mt-2 max-w-[500px] text-2xl font-black leading-tight">
-                Web3 landing page build
-              </h2>
-            </div>
-            <div className="rounded-[12px] bg-[var(--text-primary)] px-4 py-3 text-[var(--background)]">
-              <p className="text-[11px] font-black uppercase opacity-60">Escrow</p>
-              <p className="mt-1 text-xl font-black leading-none">1,500 USDT</p>
-              <p className="mt-2 text-[11px] font-black uppercase opacity-70">
-                {showPayout ? "Released" : "Locked"}
-              </p>
-            </div>
-          </div>
+          <p className="text-[11px] font-black uppercase text-[var(--text-muted)]">
+            Active work
+          </p>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {freelancerSkills.map((skill) => (
-              <Tag key={skill}>{skill}</Tag>
-            ))}
-          </div>
+          {activeJobs.length === 0 ? (
+            <p className="mt-3 text-[14px] text-[var(--text-muted)]">No active jobs yet.</p>
+          ) : (
+            <div className="mt-3 grid gap-3">
+              {activeJobs.map(({ job, contract }) => (
+                <article
+                  key={job.id}
+                  className="flex flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[15px] font-black text-[var(--text-primary)]">
+                        {job.title}
+                      </h3>
+                      <span className="rounded-full bg-[var(--surface-strong)] px-2.5 py-1 text-[10px] font-black uppercase text-[var(--text-muted)]">
+                        {job.status === "in_progress" ? "In Progress" : job.status === "submitted" ? "Submitted" : "AI Reviewed"}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-[var(--text-secondary)]">
+                      {job.requirements ?? job.description}
+                    </p>
+                    {contract && (
+                      <p className="mt-1 text-[12px] font-black text-[var(--text-muted)]">
+                        Escrow: {contract.amount} ETH · {contract.status}
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    href={`/submit-work?job=${encodeURIComponent(job.id)}`}
+                    className="inline-flex h-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--text-primary)] px-5 text-[13px] font-black text-[var(--background)]"
+                  >
+                    Submit work
+                  </Link>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="grid gap-3 sm:grid-cols-2">
