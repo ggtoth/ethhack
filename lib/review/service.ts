@@ -7,63 +7,41 @@ import {
   type PreparedReviewedFile,
 } from "@/lib/review/image-metadata";
 import {
-  REVIEW_AGENT_INSTRUCTIONS,
-  buildReviewPrompt,
+  SATELLITE_ANALYSIS_INSTRUCTIONS,
+  buildSatelliteAnalysisPrompt,
 } from "@/lib/review/prompt";
 import {
-  ReviewModelResultSchema,
-  ReviewResultSchema,
+  SatelliteAnalysisResultSchema,
   type ReviewInputFile,
-  type ReviewResult,
+  type SatelliteAnalysisResult,
 } from "@/lib/review/schema";
 
-type RunReviewArgs = {
-  jobId?: string;
-  contractId?: string;
-  description: string;
-  submissionNotes?: string;
-  sourceFiles: ReviewInputFile[];
-  previewFiles: ReviewInputFile[];
+type RunAnalysisArgs = {
+  beforeFile: ReviewInputFile;
+  afterFile: ReviewInputFile;
+  locationHint?: string;
+  eventTypeHint?: string;
 };
 
-const SUPPORTED_IMAGE_INPUT_TYPES = new Set([
+const SUPPORTED_IMAGE_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/webp",
   "image/gif",
+  "image/tiff",
 ]);
 
-export async function runBatchReview({
-  jobId,
-  contractId,
-  description,
-  submissionNotes,
-  sourceFiles,
-  previewFiles,
-}: RunReviewArgs): Promise<ReviewResult> {
-  const reviewTimestamp = new Date().toISOString();
-  const preparedSources = await Promise.all(
-    sourceFiles.map((file) => prepareReviewFile(file, reviewTimestamp)),
-  );
-  const preparedPreviews = await Promise.all(
-    previewFiles.map((file) => prepareReviewFile(file, reviewTimestamp)),
-  );
-  const reviewedFiles = [
-    ...preparedSources.map((item) => item.reviewedFile),
-    ...preparedPreviews.map((item) => item.reviewedFile),
-  ];
+export async function runSatelliteAnalysis({
+  beforeFile,
+  afterFile,
+  locationHint,
+  eventTypeHint,
+}: RunAnalysisArgs): Promise<SatelliteAnalysisResult> {
+  const analysisTimestamp = new Date().toISOString();
+  const preparedBefore = await prepareReviewFile(beforeFile, analysisTimestamp);
+  const preparedAfter = await prepareReviewFile(afterFile, analysisTimestamp);
 
-  if (!description.trim() || preparedSources.length === 0) {
-    return buildInsufficientReview({
-      description,
-      preparedSources,
-      preparedPreviews,
-      reviewTimestamp,
-    });
-  }
-
-  await uploadFiles(preparedSources);
-  await uploadFiles(preparedPreviews);
+  await uploadFiles([preparedBefore, preparedAfter]);
 
   const client = getOpenAIClient();
   const response = await client.responses.parse({
@@ -71,58 +49,39 @@ export async function runBatchReview({
     input: [
       {
         role: "system",
-        content: REVIEW_AGENT_INSTRUCTIONS,
+        content: SATELLITE_ANALYSIS_INSTRUCTIONS,
       },
       {
         role: "user",
         content: [
           {
             type: "input_text",
-            text: buildReviewPrompt({
-              jobId,
-              contractId,
-              description,
-              submissionNotes,
-              sources: preparedSources,
-              previews: preparedPreviews,
+            text: buildSatelliteAnalysisPrompt({
+              locationHint,
+              eventTypeHint,
+              beforeFileName: beforeFile.file.name,
+              afterFileName: afterFile.file.name,
             }),
           },
-          ...preparedSources.map(toResponseInput),
-          ...preparedPreviews.map(toResponseInput),
+          toResponseInput(preparedBefore),
+          toResponseInput(preparedAfter),
         ],
       },
     ],
     text: {
-      format: zodTextFormat(ReviewModelResultSchema, "file_comparison_review"),
+      format: zodTextFormat(SatelliteAnalysisResultSchema, "satellite_damage_analysis"),
     },
   });
 
   const parsed = response.output_parsed;
 
   if (!parsed) {
-    throw new Error("The review model returned no structured output.");
+    throw new Error("The analysis model returned no structured output.");
   }
 
-  return ReviewResultSchema.parse({
+  return SatelliteAnalysisResultSchema.parse({
     ...parsed,
-    review_timestamp: reviewTimestamp,
-    request_context: {
-      ...parsed.request_context,
-      input_completeness: getInputCompleteness({
-        description,
-        hasPreview: preparedPreviews.length > 0,
-        hasSource: preparedSources.length > 0,
-      }),
-    },
-    verdicts:
-      preparedPreviews.length > 0
-        ? parsed.verdicts
-        : {
-            ...parsed.verdicts,
-            preview_vs_source: missingPreviewVerdict(),
-            preview_vs_description: missingPreviewVerdict(),
-    },
-    reviewed_files: reviewedFiles,
+    analysis_timestamp: analysisTimestamp,
   });
 }
 
@@ -141,10 +100,8 @@ async function uploadFiles(files: PreparedReviewedFile[]) {
   );
 }
 
-function toResponseInput(
-  file: PreparedReviewedFile,
-): Responses.ResponseInputContent {
-  if (SUPPORTED_IMAGE_INPUT_TYPES.has(file.file.type)) {
+function toResponseInput(file: PreparedReviewedFile): Responses.ResponseInputContent {
+  if (SUPPORTED_IMAGE_TYPES.has(file.file.type)) {
     return {
       type: "input_image",
       file_id: file.reviewedFile.file_id,
@@ -157,101 +114,4 @@ function toResponseInput(
     file_id: file.reviewedFile.file_id,
     filename: file.reviewedFile.file_name,
   };
-}
-
-function buildInsufficientReview({
-  description,
-  preparedSources,
-  preparedPreviews,
-  reviewTimestamp,
-}: {
-  description: string;
-  preparedSources: PreparedReviewedFile[];
-  preparedPreviews: PreparedReviewedFile[];
-  reviewTimestamp: string;
-}) {
-  const missingInputs = [
-    !description.trim() ? "a usable project description" : null,
-    preparedSources.length === 0 ? "at least one source/work file" : null,
-    preparedPreviews.length === 0 ? "preview files" : null,
-  ].filter((value): value is string => Boolean(value));
-  const reason = `The request is missing ${missingInputs.join(", ")}.`;
-
-  return ReviewResultSchema.parse({
-    schema_version: "1.0",
-    review_timestamp: reviewTimestamp,
-    request_context: {
-      description_summary: description.trim()
-        ? summarizeDescription(description)
-        : "No usable description was supplied.",
-      input_completeness: "INSUFFICIENT",
-    },
-    verdicts: {
-      preview_vs_source: {
-        verdict: "INSUFFICIENT_EVIDENCE",
-        reason,
-        evidence: [],
-      },
-      preview_vs_description: {
-        verdict: "INSUFFICIENT_EVIDENCE",
-        reason,
-        evidence: [],
-      },
-      source_vs_description: {
-        verdict: "INSUFFICIENT_EVIDENCE",
-        reason,
-        evidence: [],
-      },
-    },
-    reviewed_files: [
-      ...preparedSources.map((item) => item.reviewedFile),
-      ...preparedPreviews.map((item) => item.reviewedFile),
-    ],
-    comparison_notes: {
-      key_gaps: missingInputs,
-      ambiguities: [],
-      confidence: "LOW",
-    },
-    user_visible: {
-      summary:
-        "The AI review could not make a defensible judgment because required inputs were missing.",
-      what_user_will_see: [
-        "Add the project description and submitted work files, then run the review again.",
-      ],
-    },
-  });
-}
-
-function getInputCompleteness({
-  description,
-  hasPreview,
-  hasSource,
-}: {
-  description: string;
-  hasPreview: boolean;
-  hasSource: boolean;
-}) {
-  if (!description.trim() || !hasSource) {
-    return "INSUFFICIENT" as const;
-  }
-
-  if (!hasPreview) {
-    return "PARTIAL" as const;
-  }
-
-  return "COMPLETE" as const;
-}
-
-function missingPreviewVerdict() {
-  return {
-    verdict: "INSUFFICIENT_EVIDENCE" as const,
-    reason: "No preview file or preview output was supplied for this check.",
-    evidence: [],
-  };
-}
-
-function summarizeDescription(description: string) {
-  const normalized = description.trim().replace(/\s+/g, " ");
-
-  return normalized.length > 180 ? `${normalized.slice(0, 177)}...` : normalized;
 }

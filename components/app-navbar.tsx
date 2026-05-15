@@ -7,11 +7,7 @@ import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
-  { href: "/", label: "Start" },
-  { href: "/wallet", label: "Wallet" },
-  { href: "/post-job", label: "Create" },
-  { href: "/browse-jobs", label: "Browse jobs" },
-  { href: "/my-jobs", label: "My jobs" },
+  { href: "/", label: "Analyze" },
 ];
 
 export function AppNavbar() {

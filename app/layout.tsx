@@ -27,8 +27,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SmartJobs | AI Escrow Protocol",
-  description: "Crypto escrow and AI-assisted review for freelance work.",
+  title: "SatDamage | Satellite Change Detection",
+  description: "Post-event satellite image comparison and infrastructure damage assessment.",
 };
 
 export default async function RootLayout({

@@ -1,76 +1,81 @@
 import { z } from "zod";
 
-export const VerdictEnumSchema = z.enum([
-  "MATCH",
-  "PARTIAL_MATCH",
-  "MISMATCH",
+export const DamageVerdictSchema = z.enum([
+  "SIGNIFICANT_DAMAGE",
+  "MODERATE_DAMAGE",
+  "MINOR_DAMAGE",
+  "NO_CHANGE",
   "INSUFFICIENT_EVIDENCE",
 ]);
 
-export const InputCompletenessSchema = z.enum([
-  "COMPLETE",
-  "PARTIAL",
-  "INSUFFICIENT",
+export const ConfidenceSchema = z.enum(["HIGH", "MEDIUM", "LOW"]);
+
+export const DamageTypeSchema = z.enum([
+  "structural_destruction",
+  "fire_damage",
+  "flooding",
+  "debris",
+  "infrastructure_damage",
+  "vegetation_loss",
+  "crater",
+  "other",
 ]);
 
-export const ReviewConfidenceSchema = z.enum(["HIGH", "MEDIUM", "LOW"]);
+export const SeveritySchema = z.enum(["HIGH", "MEDIUM", "LOW"]);
 
-export const ReviewedFileRoleSchema = z.enum(["preview", "source", "other"]);
+export const AlignmentQualitySchema = z.enum(["GOOD", "PARTIAL", "POOR"]);
 
-export const VerdictSchema = z.object({
-  verdict: VerdictEnumSchema,
-  reason: z.string(),
-  evidence: z.array(z.string()),
-});
-
-export const ReviewedFileSchema = z.object({
-  file_id: z.string().nullable(),
-  file_name: z.string(),
-  file_path: z.string().nullable(),
-  role: ReviewedFileRoleSchema,
-  hash: z.object({
-    algorithm: z.string().nullable(),
-    value: z.string().nullable(),
-    provided: z.boolean(),
-  }),
-  timestamps: z.object({
-    created_at: z.string().nullable(),
-    updated_at: z.string().nullable(),
-    reviewed_at: z.string(),
-  }),
+export const DamageZoneSchema = z.object({
+  zone_id: z.string(),
+  description: z.string(),
+  damage_type: DamageTypeSchema,
+  severity: SeveritySchema,
+  location_hint: z.string(),
+  estimated_area: z.string().nullable(),
   notes: z.array(z.string()),
 });
 
-export const ReviewResultSchema = z.object({
-  schema_version: z.literal("1.0"),
-  review_timestamp: z.string(),
-  request_context: z.object({
-    description_summary: z.string(),
-    input_completeness: InputCompletenessSchema,
+export const SatelliteAnalysisResultSchema = z.object({
+  schema_version: z.literal("2.0"),
+  analysis_timestamp: z.string(),
+  event_type: z.string(),
+  damage_assessment: z.object({
+    overall_verdict: DamageVerdictSchema,
+    confidence: ConfidenceSchema,
+    confidence_reason: z.string(),
+    estimated_affected_area: z.string().nullable(),
+    damage_severity_score: z.number().min(0).max(100),
   }),
-  verdicts: z.object({
-    preview_vs_source: VerdictSchema,
-    preview_vs_description: VerdictSchema,
-    source_vs_description: VerdictSchema,
+  damage_zones: z.array(DamageZoneSchema),
+  change_indicators: z.object({
+    structural_changes: z.array(z.string()),
+    vegetation_changes: z.array(z.string()),
+    water_changes: z.array(z.string()),
+    other_changes: z.array(z.string()),
   }),
-  reviewed_files: z.array(ReviewedFileSchema),
-  comparison_notes: z.object({
-    key_gaps: z.array(z.string()),
-    ambiguities: z.array(z.string()),
-    confidence: ReviewConfidenceSchema,
+  image_quality: z.object({
+    before_image: z.object({
+      usable: z.boolean(),
+      issues: z.array(z.string()),
+    }),
+    after_image: z.object({
+      usable: z.boolean(),
+      issues: z.array(z.string()),
+    }),
+    alignment_quality: AlignmentQualitySchema,
   }),
   user_visible: z.object({
     summary: z.string(),
-    what_user_will_see: z.array(z.string()),
+    key_findings: z.array(z.string()),
+    uncertainty_notes: z.array(z.string()),
   }),
 });
 
-export const ReviewModelResultSchema = ReviewResultSchema;
+export type SatelliteAnalysisResult = z.infer<typeof SatelliteAnalysisResultSchema>;
+export type DamageZone = z.infer<typeof DamageZoneSchema>;
+export type DamageVerdict = z.infer<typeof DamageVerdictSchema>;
 
-export type ReviewResult = z.infer<typeof ReviewResultSchema>;
-export type ReviewedFile = z.infer<typeof ReviewedFileSchema>;
-export type ReviewedFileRole = z.infer<typeof ReviewedFileRoleSchema>;
-
+// kept for image-metadata.ts compatibility
 export type ReviewInputFile = {
   file: File;
   role: "source" | "preview" | "other";
@@ -79,4 +84,22 @@ export type ReviewInputFile = {
   filePath?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+};
+
+export type ReviewedFile = {
+  file_id: string | null;
+  file_name: string;
+  file_path: string | null;
+  role: "preview" | "source" | "other";
+  hash: {
+    algorithm: string | null;
+    value: string | null;
+    provided: boolean;
+  };
+  timestamps: {
+    created_at: string | null;
+    updated_at: string | null;
+    reviewed_at: string;
+  };
+  notes: string[];
 };
