@@ -9,6 +9,7 @@
 
 <p align="center">
   <a href="#what-it-is">Overview</a> ·
+  <a href="#hackathon-focus">Hackathon focus</a> ·
   <a href="#the-user-flow">User flow</a> ·
   <a href="#screens">Screens</a> ·
   <a href="#tech-stack">Tech stack</a> ·
@@ -17,6 +18,21 @@
 </p>
 
 > ⚠️ **Hackathon / demo project.** It runs on the **Sepolia testnet** and the screenshots below use **demo data**. Do not use it with real funds or a main wallet.
+
+---
+
+## Hackathon focus
+
+Smart Jobs was built as a hackathon portfolio project to explore how a real freelance marketplace flow could combine **Web3 payments**, **AI-assisted review**, and **automation** into one product experience.
+
+What we practiced and learned:
+
+- **Web3 product design** — mapping a familiar freelance workflow to wallet actions, escrow states, and Sepolia testnet transactions.
+- **Smart contract development** — writing and testing a Solidity escrow contract with fund, lock, release, refund, and payout paths.
+- **On-chain UX** — connecting frontend state to wallet-native actions while keeping the buyer and freelancer roles understandable.
+- **AI automation** — using OpenAI to review submitted work against the original brief and turn the result into a practical buyer recommendation.
+- **Content verification** — exploring Swarm-based delivery evidence and client-side verified fetches.
+- **Full-stack delivery** — combining Next.js, TypeScript, API routes, contract helpers, test coverage, and a demo-ready UI into one end-to-end prototype.
 
 ---
 
